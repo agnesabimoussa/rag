@@ -7,7 +7,14 @@ authors = [
     { name = "abimoussagnes", email = "agnesabimoussa17@gmail.com" }
 ]
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "chonkie>=1.7.0",
+    "fire>=0.7.1",
+    "huggingface-hub>=1.27.0",
+    "langchain-text-splitters>=1.1.2",
+    "tqdm>=4.70.0",
+    "tree-sitter-language-pack>=1.14.3",
+]
 
 [project.scripts]
 rag = "rag:main"

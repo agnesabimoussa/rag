@@ -1,3 +1,5 @@
 .venv
 vllm-0.10.1/
 moulinette
+__pycache__
+data/raw/

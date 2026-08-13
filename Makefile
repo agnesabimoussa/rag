@@ -4,10 +4,10 @@ install:
 	uv sync
 
 run:
-	uv run python -m src main.py
+	uv run python -m src
 
 debug:
-	uv run python -m pdb main.py
+	uv run python -m pdb src/__main__.py
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +
