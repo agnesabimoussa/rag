@@ -9,7 +9,6 @@ class CodeIndexing:
         self.max_chunk_size = max_chunk_size
 
     def index_file(self, content: str) -> List[str]:
-        chunks = []
         # 2. Initialize the splitter optimized for Python syntax
         # Chunk size is small here to force clean splits along boundaries
         if self.max_chunk_size:
@@ -24,8 +23,5 @@ class CodeIndexing:
                 chunk_overlap=20
             )
         # 3. Create the document chunks
-        chunks = splitter.create_documents([content])
-        # 4. Display the structural chunks
-        for i, chunk in enumerate(chunks):
-            chunks.append(chunk)
-        return chunks
+        documents = splitter.create_documents([content])
+        return [document.page_content.strip() for document in documents]

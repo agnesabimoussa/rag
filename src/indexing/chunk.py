@@ -1,4 +1,10 @@
+from dataclasses import asdict, dataclass
+
+
+@dataclass
 class Chunk:
-    def __init__(self, id: int, text: str) -> None:
-        self.chunk_id = id
-        self.chunk_text = text
+    chunk_id: int
+    chunk_text: str
+
+    def to_dict(self) -> dict[str, int | str]:
+        return asdict(self)
