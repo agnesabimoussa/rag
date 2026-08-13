@@ -3,7 +3,8 @@
 from pathlib import Path
 from src.indexing.markdown_indexing import MarkdwonIndexing
 from src.indexing.code_indexing import CodeIndexing
-from typing import Dict
+from typing import List
+from chunk import Chunk
 import itertools
 import json
 
@@ -17,9 +18,9 @@ class Indexing:
         self.mardown_indexing = MarkdwonIndexing(max_chunk_size)
         self.code_indexing = CodeIndexing(max_chunk_size)
 
-    def index_files(self) -> Dict[int, str]:
-        all_chunks = []
-        id_chunk = {}
+    def index_files(self) -> list[Chunk]:
+        all_chunks: List[str] = []
+        id_chunk: List[Chunk] = []
         for file_path in Path(self.folder_path).rglob("*"):
             if file_path.is_file() and file_path.name.endswith(".md"):
                 content = file_path.open("r", encoding="utf-8").read()
@@ -34,14 +35,14 @@ class Indexing:
         id_generator = itertools.count(start=1)
         for chunk in all_chunks:
             id = next(id_generator)
-            id_chunk[id] = chunk
+            id_chunk.append(Chunk(id, chunk))
         return id_chunk
 
     def write_result(self) -> None:
         id_chunk = self.index_files()
-        folder_path = Path("/data/processed/")
+        folder_path = Path("data/processed/")
         file_name = "index_file.json"
         full_path = folder_path / file_name
         folder_path.mkdir(parents=True, exist_ok=True)
         with open(full_path, "w") as file:
-            json.dump(id_chunk, file, indent=4, sort_keys=True)
+            json.dump(id_chunk, file, indent=4)
