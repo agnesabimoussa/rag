@@ -9,7 +9,7 @@ class Indexing:
         self.chunks = chunks
         self.output_file = Path(output_file)
 
-    def create_index(self) -> None:
+    def create_index(self) -> BM25Okapi:
         tokenized_chunks = [
             chunk.lower().split()
             for chunk in self.chunks
@@ -19,3 +19,4 @@ class Indexing:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with output_path.open("wb") as file:
             pickle.dump(bm25, file)
+        return bm25
