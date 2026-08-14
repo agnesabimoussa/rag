@@ -1,4 +1,4 @@
-from search_result import MinimalSearchResults
+from data_models.search_result import MinimalSearchResults
 from typing import List
 from pydantic import BaseModel
 

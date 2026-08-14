@@ -19,6 +19,6 @@ def main() -> None:
     # datasets_public/public/UnansweredQuestions
     retrieval = Retrieval(
         bm25, "datasets_public/public/UnansweredQuestions", 4)
-    
+    retrieval.get_prompts()
     # except Exception as e:
     #     print(e)

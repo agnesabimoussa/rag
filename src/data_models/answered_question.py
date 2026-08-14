@@ -1,5 +1,5 @@
-from unanswered_question import UnansweredQuestion
-from minimal_source import MinimalSource
+from data_models.unanswered_question import UnansweredQuestion
+from data_models.minimal_source import MinimalSource
 from typing import List
 
 

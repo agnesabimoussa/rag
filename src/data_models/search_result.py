@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from typing import List
-from minimal_source import MinimalSource
+from data_models.minimal_source import MinimalSource
 
 
 class MinimalSearchResults(BaseModel):
