@@ -18,7 +18,7 @@ def main() -> None:
     # 3 - retrieval - retrieve relevant documents for all questions in
     # datasets_public/public/UnansweredQuestions
     retrieval = Retrieval(
-        bm25, "datasets_public/public/UnansweredQuestions", 4)
+        bm25, "datasets_public/public/UnansweredQuestions", chunks_text)
     retrieval.get_prompts()
     # except Exception as e:
     #     print(e)
