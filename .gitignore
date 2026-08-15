@@ -4,3 +4,4 @@ moulinette
 __pycache__
 data/raw/
 example.py
+inputs/

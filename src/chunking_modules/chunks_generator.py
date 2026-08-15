@@ -28,7 +28,7 @@ class Chunking:
                 chunk_id=next(self.id_generator)
             ))
 
-    def chunk_files(self) -> list[Chunk]:
+    def chunk_files(self) -> None:
         if not self.folder_path.is_dir():
             raise FileNotFoundError(
                 f"Input directory does not exist: {self.folder_path}"
@@ -59,6 +59,7 @@ class Chunking:
         return chunks_text
 
     def write_result(self) -> None:
+        self.chunk_files()
         output_path = self.output_file_path
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with output_path.open("w", encoding="utf-8") as file:
