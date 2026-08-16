@@ -28,8 +28,7 @@ def main() -> None:
         chunks)
     retrieval.write_search_results()
     answer_generator = AnswerGenerator("data/output/search_results/UnansweredQuestions/dataset_code_public.json",
-                                       "data/output/search_results_and_answer/UnansweredQuestions"
-                                       )
-    answers = answer_generator.answer_dataset()
+                                       "data/output/search_results_and_answer/UnansweredQuestions")
+    answer_generator.write_answers()
     # except Exception as e:
     #     print(e)

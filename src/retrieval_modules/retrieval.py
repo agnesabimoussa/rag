@@ -104,8 +104,11 @@ class Retrieval:
         search_results = self.search_dataset()
         path = self.answered_questions_path
         path.mkdir(parents=True, exist_ok=True)
-        full_path = path / "search_results.txt"
+        full_path = path / self.unanswered_questions_path.name
         with open(full_path, "w", encoding="utf-8") as file:
             json.dump(search_results.model_dump(),
                       file,
                       indent=4)
+    
+    def get_k(self) -> int:
+        return self.k
