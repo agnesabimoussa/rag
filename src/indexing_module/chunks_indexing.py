@@ -2,16 +2,17 @@ from typing import List
 from pathlib import Path
 import pickle
 from rank_bm25 import BM25Okapi
+from chunking_modules.chunk import Chunk
 
 
 class Indexing:
-    def __init__(self, chunks: List[str], output_file: str) -> None:
+    def __init__(self, chunks: List[Chunk], output_file: str) -> None:
         self.chunks = chunks
         self.output_file = Path(output_file)
 
     def create_index(self) -> BM25Okapi:
         tokenized_chunks = [
-            chunk.lower().split()
+            chunk.text.lower().split()
             for chunk in self.chunks
         ]
         bm25 = BM25Okapi(tokenized_chunks)
