@@ -1,17 +1,78 @@
 # from markdown_indexing import MarkdwonIndexing
 # from code_indexing import CodeIndexing
 from pathlib import Path
+import bisect
 import itertools
 import json
-from typing import List
+from typing import List, Tuple
 from src.chunking_modules.markdown_chunking import MarkdwonChunking
 from src.chunking_modules.code_chunking import CodeChunking
 from src.chunking_modules.chunk import Chunk
+from tqdm import tqdm
+
+
+def _normalize_with_positions(text: str) -> Tuple[str, List[int]]:
+    """Strip everything but word characters, remembering each kept
+    character's original index so a match in the normalized string can be
+    mapped back to a real offset."""
+    normalized_chars = []
+    positions = []
+    for index, char in enumerate(text):
+        if char.isalnum() or char == "_":
+            normalized_chars.append(char)
+            positions.append(index)
+    return "".join(normalized_chars), positions
+
+
+class _SpanLocator:
+    """Locates each chunk's (first_character_index, last_character_index)
+    span in its source content, tolerant of splitters (e.g.
+    MarkdownHeaderTextSplitter) that reformat or drop whitespace/punctuation
+    while leaving word content untouched."""
+
+    def __init__(self, content: str) -> None:
+        self.content = content
+        self.norm_content, self.positions = _normalize_with_positions(content)
+        self.search_start = 0
+
+    def locate(self, chunk: str) -> Tuple[int, int]:
+        # self.search_start is always in raw-content coordinates; the
+        # normalized string is only searched via a position translated
+        # through `self.positions` so the two coordinate spaces never mix.
+        exact_index = self.content.find(chunk, self.search_start)
+        if exact_index != -1:
+            self.search_start = exact_index
+            return exact_index, exact_index + len(chunk)
+
+        norm_chunk, _ = _normalize_with_positions(chunk)
+        if not norm_chunk:
+            raise ValueError(f"Chunk text not found in source content: {chunk[:80]!r}")
+        norm_search_start = bisect.bisect_left(self.positions, self.search_start)
+        norm_start = self.norm_content.find(norm_chunk, norm_search_start)
+        if norm_start == -1:
+            raise ValueError(f"Chunk text not found in source content: {chunk[:80]!r}")
+        norm_end = norm_start + len(norm_chunk) - 1
+        first_character_index = self.positions[norm_start]
+        last_character_index = self.positions[norm_end] + 1
+        self.search_start = first_character_index
+        return first_character_index, last_character_index
 
 
 class Chunking:
+    """Splits every Markdown/Python file under a folder into `Chunk`s,
+    using a distinct chunking strategy per file type.
+    """
+
     def __init__(self, folder_path: str, output_file_path: str,
                  max_chunk_size: int = 2000) -> None:
+        """Initialize the chunker.
+
+        Args:
+            folder_path: Root directory to recursively scan for `.md`/`.py`
+                files.
+            output_file_path: Where `write_result` persists the chunks.
+            max_chunk_size: Maximum characters per chunk.
+        """
         self.folder_path = Path(folder_path)
         self.output_file_path = Path(output_file_path)
         self.max_chunk_size = max_chunk_size
@@ -20,45 +81,58 @@ class Chunking:
         self.chunks: list[Chunk] = []
         self.id_generator = itertools.count(start=1)
 
-    def _add_chunks(self, chunks: List[str], source: str):
+    def _add_chunks(self, chunks: List[str], source: str, content: str) -> None:
+        """Locate each chunk's character span in `content` and store it.
+
+        Args:
+            chunks: Chunk texts produced by a chunking strategy.
+            source: Corpus-relative path of the file they came from.
+            content: Full original file content, used to locate spans.
+        """
+        locator = _SpanLocator(content)
         for chunk in chunks:
+            first_character_index, last_character_index = locator.locate(chunk)
             self.chunks.append(Chunk(
                 text=chunk,
                 source=source,
-                chunk_id=next(self.id_generator)
+                chunk_id=next(self.id_generator),
+                first_character_index=first_character_index,
+                last_character_index=last_character_index
             ))
 
-    def chunk_files(self) -> list[Chunk]:
+    def chunk_files(self) -> None:
+        """Chunk every `.md`/`.py` file under `self.folder_path`.
+
+        Raises:
+            FileNotFoundError: If `self.folder_path` does not exist.
+        """
         if not self.folder_path.is_dir():
             raise FileNotFoundError(
                 f"Input directory does not exist: {self.folder_path}"
             )
 
-        for file_path in self.folder_path.rglob("*"):
+        file_paths = list(self.folder_path.rglob("*"))
+        for file_path in tqdm(file_paths, desc="Chunking"):
             if file_path.is_file() and file_path.suffix.lower() == ".md":
                 with file_path.open("r", encoding="utf-8") as file:
                     content = file.read()
                 chunks = self.mardown_chunking.chunk_file(content)
                 source = file.name
-                self._add_chunks(chunks, source)
+                self._add_chunks(chunks, source, content)
             elif file_path.is_file() and file_path.suffix.lower() == ".py":
                 with file_path.open("r", encoding="utf-8") as file:
                     content = file.read()
                 chunks = self.code_chunking.chunk_file(content)
                 source = file.name
-                self._add_chunks(chunks, source)
+                self._add_chunks(chunks, source, content)
 
-    # def print_chunks(self):
-    #     for chunk in self.chunks:
-    #         print(chunk)
-    
-    def get_chunks_text(self) -> List[str]:
-        chunks_text = []
-        for chunk in self.chunks:
-            chunks_text.append(chunk.text)
-        return chunks_text
+    def get_chunks(self) -> List[Chunk]:
+        """Return the chunks produced by the most recent `chunk_files` call."""
+        return self.chunks
 
     def write_result(self) -> None:
+        """Chunk `self.folder_path` and persist the result as JSON."""
+        self.chunk_files()
         output_path = self.output_file_path
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with output_path.open("w", encoding="utf-8") as file:
