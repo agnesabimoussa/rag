@@ -1,5 +1,7 @@
-from .rag import main
+import fire
+
+from .pipeline_module.pipeline import Pipeline
 
 
 if __name__ == "__main__":
-    main()
+    fire.Fire(Pipeline)

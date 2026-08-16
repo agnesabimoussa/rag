@@ -8,6 +8,7 @@ from typing import List, Tuple
 from src.chunking_modules.markdown_chunking import MarkdwonChunking
 from src.chunking_modules.code_chunking import CodeChunking
 from src.chunking_modules.chunk import Chunk
+from tqdm import tqdm
 
 
 def _normalize_with_positions(text: str) -> Tuple[str, List[int]]:
@@ -58,8 +59,20 @@ class _SpanLocator:
 
 
 class Chunking:
+    """Splits every Markdown/Python file under a folder into `Chunk`s,
+    using a distinct chunking strategy per file type.
+    """
+
     def __init__(self, folder_path: str, output_file_path: str,
                  max_chunk_size: int = 2000) -> None:
+        """Initialize the chunker.
+
+        Args:
+            folder_path: Root directory to recursively scan for `.md`/`.py`
+                files.
+            output_file_path: Where `write_result` persists the chunks.
+            max_chunk_size: Maximum characters per chunk.
+        """
         self.folder_path = Path(folder_path)
         self.output_file_path = Path(output_file_path)
         self.max_chunk_size = max_chunk_size
@@ -68,7 +81,14 @@ class Chunking:
         self.chunks: list[Chunk] = []
         self.id_generator = itertools.count(start=1)
 
-    def _add_chunks(self, chunks: List[str], source: str, content: str):
+    def _add_chunks(self, chunks: List[str], source: str, content: str) -> None:
+        """Locate each chunk's character span in `content` and store it.
+
+        Args:
+            chunks: Chunk texts produced by a chunking strategy.
+            source: Corpus-relative path of the file they came from.
+            content: Full original file content, used to locate spans.
+        """
         locator = _SpanLocator(content)
         for chunk in chunks:
             first_character_index, last_character_index = locator.locate(chunk)
@@ -81,12 +101,18 @@ class Chunking:
             ))
 
     def chunk_files(self) -> None:
+        """Chunk every `.md`/`.py` file under `self.folder_path`.
+
+        Raises:
+            FileNotFoundError: If `self.folder_path` does not exist.
+        """
         if not self.folder_path.is_dir():
             raise FileNotFoundError(
                 f"Input directory does not exist: {self.folder_path}"
             )
 
-        for file_path in self.folder_path.rglob("*"):
+        file_paths = list(self.folder_path.rglob("*"))
+        for file_path in tqdm(file_paths, desc="Chunking"):
             if file_path.is_file() and file_path.suffix.lower() == ".md":
                 with file_path.open("r", encoding="utf-8") as file:
                     content = file.read()
@@ -101,9 +127,11 @@ class Chunking:
                 self._add_chunks(chunks, source, content)
 
     def get_chunks(self) -> List[Chunk]:
+        """Return the chunks produced by the most recent `chunk_files` call."""
         return self.chunks
 
     def write_result(self) -> None:
+        """Chunk `self.folder_path` and persist the result as JSON."""
         self.chunk_files()
         output_path = self.output_file_path
         output_path.parent.mkdir(parents=True, exist_ok=True)
