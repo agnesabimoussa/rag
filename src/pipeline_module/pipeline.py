@@ -33,10 +33,10 @@ class Pipeline:
             "data/datasets/UnansweredQuestions/dataset_docs_public.json",
             chunks)
         retrieval.write_search_results()
-        answer_generator = AnswerGenerator("data/output/search_results/UnansweredQuestions/dataset_code_public.json",
+        answer_generator = AnswerGenerator("data/output/search_results//dataset_code_public.json",
                                            "data/output/search_results_and_answer/")
         answer_generator.write_answers()
-        answer_generator = AnswerGenerator("data/output/search_results/UnansweredQuestions/dataset_docs_public.json",
+        answer_generator = AnswerGenerator("data/output/search_results//dataset_docs_public.json",
                                            "data/output/search_results_and_answer/")
         answer_generator.write_answers()
         evaluation = Evaluation("data/output/search_results/", "data/datasets/AnsweredQuestions")
