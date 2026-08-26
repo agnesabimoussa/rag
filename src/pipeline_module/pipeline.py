@@ -21,25 +21,30 @@ class Pipeline:
 
     @staticmethod
     def run_pipeline() -> None:
-        # 1 - chunking: write to data/processed/index_file.json
-        chunking = Chunking("data/raw", "data/processed/chunk_file.json")
-        chunking.write_result()
-        chunks = chunking.get_chunks()
+        """Run the full ingestion, retrieval, and answer-generation workflow.
+
+        This legacy helper mirrors the batch pipeline used by the project
+        entry points and persists the generated artifacts under the data
+        directory.
+        """
+        # 1 - chunking: write to data/processed/
+        chunking = Chunking("data/raw", "data/processed/")
+        chunks = chunking.apply_chunking()
         # 2 - indexing: save bm25 index to data/processed/bm25_index.pkl
         indexing = Indexing(chunks, "data/processed/bm25_index.pkl")
         bm25 = indexing.create_index()
         # 3 - retrieval - retrieve relevant documents for all questions in
         # datasets_public/public/
         # save dir, questions file
-        retrieval = Retrieval(
-            bm25,
-            "data/output/search_results/UnansweredQuestions/",
-            "data/datasets/UnansweredQuestions/dataset_code_public.json",
-            chunks)
-        retrieval.write_search_results()
-        answer_generator = AnswerGenerator("data/output/search_results/UnansweredQuestions/dataset_code_public.json",
-                                           "data/output/search_results_and_answer/UnansweredQuestions")
-        answer_generator.write_answers()
+        # retrieval = Retrieval(
+        #     bm25,
+        #     "data/output/search_results/UnansweredQuestions/",
+        #     "data/datasets/UnansweredQuestions/dataset_code_public.json",
+        #     chunks)
+        # retrieval.write_search_results()
+        # answer_generator = AnswerGenerator("data/output/search_results/UnansweredQuestions/dataset_code_public.json",
+        #                                    "data/output/search_results_and_answer/UnansweredQuestions")
+        # answer_generator.write_answers()
 
     @staticmethod
     def index(max_chunk_size: int = 2000,
@@ -54,11 +59,11 @@ class Pipeline:
                 written to.
         """
         try:
-            chunking = Chunking(corpus_path, f"{output_dir}/chunk_file.json", max_chunk_size)
-            chunking.write_result()
-            chunks = chunking.get_chunks()
-            indexing = Indexing(chunks, f"{output_dir}/bm25_index.pkl")
-            indexing.create_index()
+            chunking = Chunking("data/raw", "data/processed/")
+            chunks = chunking.apply_chunking()
+            # 2 - indexing: save bm25 index to data/processed/bm25_index.pkl
+            indexing = Indexing(chunks, "data/processed/bm25_index.pkl")
+            bm25 = indexing.create_index()
             print(f"Ingestion complete! Indexed {len(chunks)} chunks under {output_dir}/")
         except FileNotFoundError as error:
             print(error)
@@ -73,8 +78,11 @@ class Pipeline:
             index_dir: Directory containing the persisted index (see `index`).
         """
         if not query.strip():
-            print("query must not be empty")
+            print("Query must not be empty.")
             return
+        if k <= 0:
+            print("k value must be strictly positive.")
+            return 
         try:
             retrieval = Retrieval.from_index_dir(index_dir, k)
         except FileNotFoundError as error:

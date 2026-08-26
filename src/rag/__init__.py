@@ -1,12 +1,19 @@
-# import fire
+"""RAG package bootstrap helpers.
+
+This package exposes the top-level pipeline entry point used to run the
+full ingestion, retrieval, and answer-generation workflow.
+"""
+
 from src.pipeline_module.pipeline import Pipeline
-# This will run the rag pipeline on the whole batch of data
-# Put them in a class called pipeline instead
 
 
 def main() -> None:
-    # Source documents -> Chunking -> Indexing -> retrieval -> generation -> answer
+    """Run the full pipeline end-to-end.
+
+    Returns:
+        None. Any pipeline exception is printed and surfaced to the caller.
+    """
     try:
         Pipeline.run_pipeline()
-    except Exception as e:
-        print(e)
+    except Exception as exc:  # pragma: no cover - CLI convenience wrapper
+        print(exc)

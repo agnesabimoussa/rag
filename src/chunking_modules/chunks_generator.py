@@ -1,20 +1,28 @@
-# from markdown_indexing import MarkdwonIndexing
-# from code_indexing import CodeIndexing
-from pathlib import Path
+"""Chunk generation and source-span mapping for the document corpus."""
+
 import bisect
-import itertools
 import json
+import itertools
+from pathlib import Path
 from typing import List, Tuple
-from src.chunking_modules.markdown_chunking import MarkdwonChunking
-from src.chunking_modules.code_chunking import CodeChunking
-from src.chunking_modules.chunk import Chunk
 from tqdm import tqdm
+from src.chunking_modules.code_chunking import CodeChunking
+from src.chunking_modules.markdown_chunking import MarkdwonChunking
+from src.chunking_modules.chunk import (MarkdownChunk, CodeChunk)
 
 
 def _normalize_with_positions(text: str) -> Tuple[str, List[int]]:
     """Strip everything but word characters, remembering each kept
     character's original index so a match in the normalized string can be
-    mapped back to a real offset."""
+    mapped back to a real offset.
+
+    Args:
+        text: The input text to normalize.
+
+    Returns:
+        A tuple containing the normalized text and the original positions of
+        each retained character.
+    """
     normalized_chars = []
     positions = []
     for index, char in enumerate(text):
@@ -25,20 +33,30 @@ def _normalize_with_positions(text: str) -> Tuple[str, List[int]]:
 
 
 class _SpanLocator:
-    """Locates each chunk's (first_character_index, last_character_index)
-    span in its source content, tolerant of splitters (e.g.
-    MarkdownHeaderTextSplitter) that reformat or drop whitespace/punctuation
-    while leaving word content untouched."""
+    """Locate each chunk span in its original source content."""
 
     def __init__(self, content: str) -> None:
+        """Prepare a locator for a source document.
+
+        Args:
+            content: The complete raw source content.
+        """
         self.content = content
         self.norm_content, self.positions = _normalize_with_positions(content)
         self.search_start = 0
 
     def locate(self, chunk: str) -> Tuple[int, int]:
-        # self.search_start is always in raw-content coordinates; the
-        # normalized string is only searched via a position translated
-        # through `self.positions` so the two coordinate spaces never mix.
+        """Find the original character offsets for a chunk.
+
+        Args:
+            chunk: The chunk text as produced by the splitter.
+
+        Returns:
+            A tuple of ``(first_character_index, last_character_index)`` values.
+
+        Raises:
+            ValueError: If the chunk cannot be mapped back to the source.
+        """
         exact_index = self.content.find(chunk, self.search_start)
         if exact_index != -1:
             self.search_start = exact_index
@@ -63,81 +81,51 @@ class Chunking:
     using a distinct chunking strategy per file type.
     """
 
-    def __init__(self, folder_path: str, output_file_path: str,
+    def __init__(self, corpus_path: str, output_dir: str,
                  max_chunk_size: int = 2000) -> None:
         """Initialize the chunker.
 
         Args:
-            folder_path: Root directory to recursively scan for `.md`/`.py`
+            corpus_path: Root directory to recursively scan for `.md`/`.py`
                 files.
             output_file_path: Where `write_result` persists the chunks.
             max_chunk_size: Maximum characters per chunk.
         """
-        self.folder_path = Path(folder_path)
-        self.output_file_path = Path(output_file_path)
-        self.max_chunk_size = max_chunk_size
-        self.mardown_chunking = MarkdwonChunking(max_chunk_size)
-        self.code_chunking = CodeChunking(max_chunk_size)
-        self.chunks: list[Chunk] = []
-        self.id_generator = itertools.count(start=1)
+        self.corpus_path = Path(corpus_path)
+        self.output_dir = Path(output_dir)
+        self.markdown_files: List[Path] = []
+        self.python_files: List[Path] = []
+        self.get_files()
+        self.markdown_chunking_strategy = MarkdwonChunking(max_chunk_size)
+        self.code_chunking_strategy = CodeChunking(max_chunk_size)
 
-    def _add_chunks(self, chunks: List[str], source: str, content: str) -> None:
-        """Locate each chunk's character span in `content` and store it.
-
-        Args:
-            chunks: Chunk texts produced by a chunking strategy.
-            source: Corpus-relative path of the file they came from.
-            content: Full original file content, used to locate spans.
-        """
-        locator = _SpanLocator(content)
-        for chunk in chunks:
-            first_character_index, last_character_index = locator.locate(chunk)
-            self.chunks.append(Chunk(
-                text=chunk,
-                source=source,
-                chunk_id=next(self.id_generator),
-                first_character_index=first_character_index,
-                last_character_index=last_character_index
-            ))
-
-    def chunk_files(self) -> None:
-        """Chunk every `.md`/`.py` file under `self.folder_path`.
-
-        Raises:
-            FileNotFoundError: If `self.folder_path` does not exist.
-        """
-        if not self.folder_path.is_dir():
+    def get_files(self) -> None:
+        if not self.corpus_path.is_dir():
             raise FileNotFoundError(
-                f"Input directory does not exist: {self.folder_path}"
+                f"Input directory does not exist: {self.corpus_path}"
             )
 
-        file_paths = list(self.folder_path.rglob("*"))
+        file_paths = list(self.corpus_path.rglob("*"))
         for file_path in tqdm(file_paths, desc="Chunking"):
             if file_path.is_file() and file_path.suffix.lower() == ".md":
-                with file_path.open("r", encoding="utf-8") as file:
-                    content = file.read()
-                chunks = self.mardown_chunking.chunk_file(content)
-                source = file.name
-                self._add_chunks(chunks, source, content)
+                self.markdown_files.append(file_path)
             elif file_path.is_file() and file_path.suffix.lower() == ".py":
-                with file_path.open("r", encoding="utf-8") as file:
-                    content = file.read()
-                chunks = self.code_chunking.chunk_file(content)
-                source = file.name
-                self._add_chunks(chunks, source, content)
+                self.python_files.append(file_path)
 
-    def get_chunks(self) -> List[Chunk]:
-        """Return the chunks produced by the most recent `chunk_files` call."""
-        return self.chunks
-
-    def write_result(self) -> None:
-        """Chunk `self.folder_path` and persist the result as JSON."""
-        self.chunk_files()
-        output_path = self.output_file_path
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        with output_path.open("w", encoding="utf-8") as file:
+    @staticmethod
+    def write_result(path: Path, file_name: str, content: List[MarkdownChunk] | List[CodeChunk]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        full_path = path / file_name
+        with full_path.open("w", encoding="utf-8") as file:
             json.dump(
-                [chunk.model_dump() for chunk in self.chunks],
+                [chunk.model_dump() for chunk in content],
                 file,
                 indent=4
             )
+
+    def apply_chunking(self) -> List[MarkdownChunk | CodeChunk]:
+        markdown_chunks = self.markdown_chunking_strategy.chunk_files(self.markdown_files)
+        code_chunks = self.code_chunking_strategy.chunk_files(self.python_files)
+        self.write_result(self.output_dir, "markdown_chunks.json", markdown_chunks)
+        self.write_result(self.output_dir, "code_chunks.json", code_chunks)
+        return markdown_chunks + code_chunks

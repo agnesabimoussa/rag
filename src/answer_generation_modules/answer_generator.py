@@ -51,7 +51,11 @@ class AnswerGenerator:
             self.search_results = None
             self.k = None
         if not system_prompt:
-            system_prompt = """A default prompt"""
+            system_prompt = """You are a careful assistant answering questions from the retrieved source context only.
+Answer directly and concisely. Be coherent and understandable, grounded in the provided sources, and avoid major 
+hallucinations. Answer the question actually asked, not a broader topic.
+Use the retrieved source excerpts as your evidence base and stay faithful to them.
+"""
         self.system_prompt = system_prompt
         local_weights_dir = self._ensure_local_weights(model_path)
         self.tokenizer = AutoTokenizer.from_pretrained(local_weights_dir)
