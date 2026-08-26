@@ -70,13 +70,13 @@ Use the retrieved source excerpts as your evidence base and stay faithful to the
             messages,
             tokenize=True,
             add_generation_prompt=True,
+            enable_thinking=False,
             return_dict=True,
             return_tensors="pt",
         ).to(self.model.device)
         with torch.no_grad():
             outputs = self.model.generate(
                 **inputs,
-                max_new_tokens=200,
             )
         answer: str = self.tokenizer.decode(
             outputs[0][inputs["input_ids"].shape[-1]:],
