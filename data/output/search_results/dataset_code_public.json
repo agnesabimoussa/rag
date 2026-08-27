@@ -921,19 +921,19 @@
             "question": "What happens when min_dynamic_patch is None in InternVL's initialization?",
             "retrieved_sources": [
                 {
-                    "file_path": "data/raw/vllm-0.10.1/vllm/model_executor/models/skyworkr1v.py",
-                    "first_character_index": 9819,
-                    "last_character_index": 10857
-                },
-                {
-                    "file_path": "data/raw/vllm-0.10.1/vllm/model_executor/models/skyworkr1v.py",
-                    "first_character_index": 9819,
-                    "last_character_index": 10857
+                    "file_path": "data/raw/vllm-0.10.1/vllm/model_executor/models/h2ovl.py",
+                    "first_character_index": 8165,
+                    "last_character_index": 9198
                 },
                 {
                     "file_path": "data/raw/vllm-0.10.1/vllm/model_executor/models/h2ovl.py",
                     "first_character_index": 8165,
                     "last_character_index": 9198
+                },
+                {
+                    "file_path": "data/raw/vllm-0.10.1/vllm/model_executor/models/skyworkr1v.py",
+                    "first_character_index": 9819,
+                    "last_character_index": 10857
                 },
                 {
                     "file_path": "data/raw/vllm-0.10.1/vllm/model_executor/models/internvl.py",

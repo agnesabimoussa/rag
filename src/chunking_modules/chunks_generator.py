@@ -114,8 +114,8 @@ class Chunking:
 
     @staticmethod
     def write_result(path: Path, file_name: str, content: List[MarkdownChunk] | List[CodeChunk]) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
         full_path = path / file_name
+        full_path.parent.mkdir(parents=True, exist_ok=True)
         with full_path.open("w", encoding="utf-8") as file:
             json.dump(
                 [chunk.model_dump() for chunk in content],

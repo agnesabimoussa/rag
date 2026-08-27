@@ -26,8 +26,8 @@
                 },
                 {
                     "file_path": "data/raw/vllm-0.10.1/tests/lora/conftest.py",
-                    "first_character_index": 6484,
-                    "last_character_index": 6625
+                    "first_character_index": 4734,
+                    "last_character_index": 4869
                 }
             ]
         },
@@ -36,19 +36,19 @@
             "question": "What command can be used to evaluate the accuracy of a quantized model using lm_eval with vLLM?",
             "retrieved_sources": [
                 {
-                    "file_path": "data/raw/vllm-0.10.1/docs/features/quantization/int4.md",
-                    "first_character_index": 3071,
-                    "last_character_index": 3617
-                },
-                {
-                    "file_path": "data/raw/vllm-0.10.1/docs/features/quantization/int4.md",
-                    "first_character_index": 3071,
-                    "last_character_index": 3617
+                    "file_path": "data/raw/vllm-0.10.1/docs/features/quantization/int8.md",
+                    "first_character_index": 3141,
+                    "last_character_index": 3711
                 },
                 {
                     "file_path": "data/raw/vllm-0.10.1/docs/features/quantization/int8.md",
                     "first_character_index": 3141,
                     "last_character_index": 3711
+                },
+                {
+                    "file_path": "data/raw/vllm-0.10.1/docs/features/quantization/int4.md",
+                    "first_character_index": 3071,
+                    "last_character_index": 3617
                 },
                 {
                     "file_path": "data/raw/vllm-0.10.1/docs/features/quantization/fp8.md",
@@ -1727,19 +1727,19 @@
             "question": "How do you evaluate accuracy of a quantized model using lm_eval in vLLM?",
             "retrieved_sources": [
                 {
-                    "file_path": "data/raw/vllm-0.10.1/docs/features/quantization/int4.md",
-                    "first_character_index": 3071,
-                    "last_character_index": 3617
-                },
-                {
-                    "file_path": "data/raw/vllm-0.10.1/docs/features/quantization/int4.md",
-                    "first_character_index": 3071,
-                    "last_character_index": 3617
+                    "file_path": "data/raw/vllm-0.10.1/docs/features/quantization/int8.md",
+                    "first_character_index": 3141,
+                    "last_character_index": 3711
                 },
                 {
                     "file_path": "data/raw/vllm-0.10.1/docs/features/quantization/int8.md",
                     "first_character_index": 3141,
                     "last_character_index": 3711
+                },
+                {
+                    "file_path": "data/raw/vllm-0.10.1/docs/features/quantization/int4.md",
+                    "first_character_index": 3071,
+                    "last_character_index": 3617
                 },
                 {
                     "file_path": "data/raw/vllm-0.10.1/docs/features/quantization/modelopt.md",
@@ -1840,9 +1840,9 @@
                     "last_character_index": 560
                 },
                 {
-                    "file_path": "data/raw/vllm-0.10.1/docs/features/quantization/int8.md",
-                    "first_character_index": 843,
-                    "last_character_index": 1001
+                    "file_path": "data/raw/vllm-0.10.1/docs/features/quantization/int4.md",
+                    "first_character_index": 859,
+                    "last_character_index": 1017
                 }
             ]
         },
@@ -1882,19 +1882,19 @@
             "question": "How many calibration samples are recommended when preparing calibration data for INT4 quantization in vLLM?",
             "retrieved_sources": [
                 {
-                    "file_path": "data/raw/vllm-0.10.1/docs/features/quantization/int8.md",
-                    "first_character_index": 843,
-                    "last_character_index": 1001
-                },
-                {
-                    "file_path": "data/raw/vllm-0.10.1/docs/features/quantization/int8.md",
-                    "first_character_index": 843,
-                    "last_character_index": 1001
+                    "file_path": "data/raw/vllm-0.10.1/docs/features/quantization/int4.md",
+                    "first_character_index": 859,
+                    "last_character_index": 1017
                 },
                 {
                     "file_path": "data/raw/vllm-0.10.1/docs/features/quantization/int4.md",
                     "first_character_index": 859,
                     "last_character_index": 1017
+                },
+                {
+                    "file_path": "data/raw/vllm-0.10.1/docs/features/quantization/int8.md",
+                    "first_character_index": 843,
+                    "last_character_index": 1001
                 },
                 {
                     "file_path": "data/raw/vllm-0.10.1/docs/features/quantization/int8.md",
@@ -2171,14 +2171,14 @@
                     "last_character_index": 560
                 },
                 {
-                    "file_path": "data/raw/vllm-0.10.1/vllm/v1/worker/gpu_worker.py",
-                    "first_character_index": 26696,
-                    "last_character_index": 27604
-                },
-                {
                     "file_path": "data/raw/vllm-0.10.1/vllm/worker/worker.py",
                     "first_character_index": 24273,
                     "last_character_index": 25181
+                },
+                {
+                    "file_path": "data/raw/vllm-0.10.1/vllm/v1/worker/gpu_worker.py",
+                    "first_character_index": 26696,
+                    "last_character_index": 27604
                 },
                 {
                     "file_path": "data/raw/vllm-0.10.1/docs/features/quantization/int8.md",
