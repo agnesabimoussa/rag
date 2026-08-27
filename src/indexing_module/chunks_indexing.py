@@ -2,7 +2,7 @@ from typing import List
 from pathlib import Path
 import pickle
 from rank_bm25 import BM25Okapi
-from src.chunking_modules.chunk import Chunk
+from src.chunking_modules.chunk import (Chunk, MarkdownChunk, CodeChunk)
 from tqdm import tqdm
 
 
