@@ -2,9 +2,10 @@ from src.data_models.search_result import (StudentSearchResults,
                                            MinimalSearchResults)
 from src.data_models.search_answer import (StudentSearchResultsAndAnswer,
                                            MinimalAnswer)
+from src.data_models.minimal_source import MinimalSource
 from src.error_handling_modules.inavlid_json import InvalidJSON
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 from pydantic import TypeAdapter, ValidationError
 import json
 import torch
@@ -56,12 +57,26 @@ Use the retrieved source excerpts as your evidence base and stay faithful to the
             raise InvalidJSON("InvalidJSON exception occured."
                               f"{self.student_search_results_path} contains invalid JSON.")
 
+    def _get_retrieved_context(self, sources: List[MinimalSource]) -> str:
+        context = []
+        for source in sources:
+            with open(source.file_path, "r", encoding="utf-8") as file:
+                content = file.read()
+            retrieved_text = content[
+                source.first_character_index:source.last_character_index
+            ]
+            context.append(retrieved_text)
+        return "\n\n".join(context)
+
     def answer_prompt(self, question: MinimalSearchResults) -> str:
-        retrieved_sources = ", ".join(
-            f"{source.file_path} [{source.first_character_index}:{source.last_character_index}]"
-            for source in question.retrieved_sources
+        retrieved_context = self._get_retrieved_context(
+            question.retrieved_sources
         )
-        system_prompt = self.system_prompt + ". Retrieved sources: " + retrieved_sources
+        system_prompt = (
+            self.system_prompt
+            + "\n\nRetrieved source context:\n"
+            + retrieved_context
+        )
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": question.question}
