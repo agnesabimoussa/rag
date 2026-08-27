@@ -13,7 +13,7 @@ class Pipeline:
     @staticmethod
     def run_pipeline() -> None:
         # 1 - chunking: write to data/processed/
-        chunking = Chunking("data/raw", "data/processed/")
+        chunking = Chunking("data/raw", "data/processed/", 2000)
         chunks = chunking.apply_chunking()
         # 2 - indexing: save bm25 index to data/processed/bm25_index.pkl
         indexing = Indexing(chunks, "data/processed/bm25_index.pkl")

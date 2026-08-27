@@ -5,7 +5,7 @@ from src.data_models.search_answer import (StudentSearchResultsAndAnswer,
 from src.data_models.minimal_source import MinimalSource
 from src.error_handling_modules.inavlid_json import InvalidJSON
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Dict
 from pydantic import TypeAdapter, ValidationError
 import json
 import torch
@@ -26,9 +26,7 @@ class AnswerGenerator:
         self.k = self.search_results.k
         if not system_prompt:
             system_prompt = """You are a careful assistant answering questions from the retrieved source context only.
-Answer directly and concisely. Be coherent and understandable, grounded in the provided sources, and avoid major 
-hallucinations. Answer the question actually asked, not a broader topic.
-Use the retrieved source excerpts as your evidence base and stay faithful to them.
+Answer directly and concisely. Be coherent and understandable, grounded in the provided sources. Answer in 1-2 sentences only.
 """
         self.system_prompt = system_prompt
         local_weights_dir = self._ensure_local_weights(model_path)
@@ -57,6 +55,31 @@ Use the retrieved source excerpts as your evidence base and stay faithful to the
             raise InvalidJSON("InvalidJSON exception occured."
                               f"{self.student_search_results_path} contains invalid JSON.")
 
+    def _get_final_response(self, messages: Dict[str, str]) -> str:
+        inputs = self.tokenizer.apply_chat_template(
+            messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            enable_thinking=False,
+            return_dict=True,
+            return_tensors="pt",
+        ).to(self.model.device)
+        with torch.no_grad():
+            outputs = self.model.generate(
+                **inputs,
+                max_new_tokens=1000,
+                do_sample=True,
+                temperature=0.7,
+                top_p=0.8,
+                top_k=20,
+                repetition_penalty=1.05,
+            )
+        answer: str = self.tokenizer.decode(
+            outputs[0][inputs["input_ids"].shape[-1]:],
+            skip_special_tokens=True,
+        )
+        return str(answer)
+
     def _get_retrieved_context(self, sources: List[MinimalSource]) -> str:
         context = []
         for source in sources:
@@ -81,23 +104,9 @@ Use the retrieved source excerpts as your evidence base and stay faithful to the
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": question.question}
         ]
-        inputs = self.tokenizer.apply_chat_template(
-            messages,
-            tokenize=True,
-            add_generation_prompt=True,
-            enable_thinking=False,
-            return_dict=True,
-            return_tensors="pt",
-        ).to(self.model.device)
-        with torch.no_grad():
-            outputs = self.model.generate(
-                **inputs,
-            )
-        answer: str = self.tokenizer.decode(
-            outputs[0][inputs["input_ids"].shape[-1]:],
-            skip_special_tokens=True,
-        )
-        return str(answer)
+
+        response = self._get_final_response(messages)
+        return response
 
     def answer_dataset(self) -> StudentSearchResultsAndAnswer:
         search_results_and_answer = StudentSearchResultsAndAnswer(k=self.k, search_results=[])
