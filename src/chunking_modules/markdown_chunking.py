@@ -61,17 +61,22 @@ class MarkdwonChunking(AbstractChunker):
             section = " > ".join(chunk.metadata.values())
             source = str(file_name)
             section_text = chunk.page_content
-            section_start, _, search_cursor = self.locate_span(
-                content,
-                section_text,
-                search_cursor,
-            )
+            section_start, section_end = self.find_span(content, section_text, search_cursor)
+            search_cursor = section_end
             sub_texts = self.semantic_chunk_section(section_text)
-            sub_spans = self.locate_subchunk_spans(
-                section_text,
-                sub_texts,
-                section_start,
-            )
+            sub_spans: list[tuple[str, int, int]] = []
+            sub_cursor = 0
+            for text in sub_texts:
+                sub_start_relative, sub_end_relative = self.find_span(section_text, text, sub_cursor)
+                sub_cursor = sub_end_relative
+                sub_spans.append(
+                    (
+                        text,
+                        section_start + sub_start_relative,
+                        section_start + sub_end_relative,
+                    )
+                )
+
             first_text, first_start, first_end = sub_spans[0]
             first_chunk = self.make_chunk(
                 first_text,

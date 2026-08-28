@@ -57,13 +57,17 @@ class CodeChunking(AbstractChunker):
         # chunk on max chunk size
         if module_docstring:
             sub_texts = self.enforce_char_limit(module_docstring)
-            docstring_cursor = content.find(module_docstring)
+            docstring_start, _ = self.find_span(content, module_docstring)
+            docstring_cursor = 0
             first_chunk = None
             for text in sub_texts:
-                first_char_idx = content.find(text, docstring_cursor)
-                if first_char_idx == -1:
-                    first_char_idx = docstring_cursor
-                last_char_idx = first_char_idx + len(text) - 1
+                first_char_rel, last_char_rel = self.find_span(
+                    module_docstring,
+                    text,
+                    docstring_cursor,
+                )
+                first_char_idx = docstring_start + first_char_rel
+                last_char_idx = docstring_start + last_char_rel - 1
                 chunk = self.make_chunk(
                     text=text,
                     source=str(file_name),
@@ -76,7 +80,7 @@ class CodeChunking(AbstractChunker):
                 )
                 chunks.append(chunk)
                 first_chunk = first_chunk or chunk
-                docstring_cursor = first_char_idx + len(text)
+                docstring_cursor = last_char_rel
         return chunks
 
     def _walk(self,
@@ -103,20 +107,19 @@ class CodeChunking(AbstractChunker):
                         parent: Optional[str]) -> str:
         text = ast.get_source_segment(content, node) or ""
         sub_texts = self.enforce_char_limit(text)
-        node_start = content.find(text)
-        cursor = node_start
+        node_start, _ = self.find_span(content, text)
+        cursor = 0
         first_chunk_id = ""
         chunk_type = "AsyncFunction" if isinstance(node, ast.AsyncFunctionDef) else "Function"
         for sub_text in sub_texts:
-            sub_start = content.find(sub_text, cursor)
-            if sub_start == -1:
-                sub_start = cursor
-            sub_end = sub_start + len(sub_text)
+            sub_start_rel, sub_end_rel = self.find_span(text, sub_text, cursor)
+            sub_start = node_start + sub_start_rel
+            sub_end = node_start + sub_end_rel
             chunk = self.make_chunk(
                 text=sub_text,
                 source=str(file_name),
                 first_char_idx=sub_start,
-                last_char_idx=max(sub_start, sub_end - 1),
+                last_char_idx=sub_end - 1,
                 original_chunk_id=first_chunk_id or None,
                 type=chunk_type,
                 parent_id=parent,
@@ -124,5 +127,5 @@ class CodeChunking(AbstractChunker):
             )
             chunks.append(chunk)
             first_chunk_id = first_chunk_id or chunk.id
-            cursor = sub_end
+            cursor = sub_end_rel
         return first_chunk_id

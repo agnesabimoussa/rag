@@ -10,35 +10,15 @@ class AbstractChunker(ABC):
         self.id_generator = itertools.count(start=1)
         self.max_chunk_size = max_chunk_size
 
-    def locate_span(self,
-                    source_text: str,
-                    target_text: str,
-                    cursor: int) -> tuple[int, int, int]:
-        start = source_text.find(target_text, cursor)
+    @staticmethod
+    def find_span(text: str, target: str, cursor: int = 0) -> tuple[int, int]:
+        """Find an exact substring span and return start/end-exclusive offsets."""
+        start = text.find(target, cursor)
         if start == -1:
-            start = source_text.find(target_text)
+            start = text.find(target)
         if start == -1:
-            start = cursor
-        end = start + len(target_text)
-        next_cursor = max(cursor, end)
-        return start, end, next_cursor
-
-    def locate_subchunk_spans(self,
-                              section_text: str,
-                              sub_texts: list[str],
-                              section_start: int) -> list[tuple[str, int, int]]:
-        spans: list[tuple[str, int, int]] = []
-        section_cursor = 0
-        for text in sub_texts:
-            sub_start_relative, sub_end_relative, section_cursor = self.locate_span(
-                section_text,
-                text,
-                section_cursor,
-            )
-            sub_start = section_start + sub_start_relative
-            sub_end = section_start + sub_end_relative
-            spans.append((text, sub_start, sub_end))
-        return spans
+            raise ValueError(f"Could not locate text: {target[:80]!r}")
+        return start, start + len(target)
 
     @staticmethod
     def read_file(file: Path) -> str:
