@@ -158,7 +158,14 @@ class CodeChunking(AbstractChunker):
             parent=None,
             type_prefix="Module",
         )
-        self._walk(tree, content, file_name, chunks, parent=None)
+        self._walk(
+            tree,
+            content,
+            file_name,
+            chunks,
+            parent=None,
+            line_offsets=line_offsets,
+        )
         return chunks
 
     def _walk(self,

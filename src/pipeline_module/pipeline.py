@@ -35,12 +35,12 @@ class Pipeline:
             chunks,
             k=10)
         retrieval.write_search_results()
-        answer_generator = AnswerGenerator("data/output/search_results/dataset_code_public.json",
-                                           "data/output/search_results_and_answer/")
-        answer_generator.write_answers()
-        answer_generator = AnswerGenerator("data/output/search_results/dataset_docs_public.json",
-                                           "data/output/search_results_and_answer/")
-        answer_generator.write_answers()
+        # answer_generator = AnswerGenerator("data/output/search_results/dataset_code_public.json",
+        #                                    "data/output/search_results_and_answer/")
+        # answer_generator.write_answers()
+        # answer_generator = AnswerGenerator("data/output/search_results/dataset_docs_public.json",
+        #                                    "data/output/search_results_and_answer/")
+        # answer_generator.write_answers()
         evaluation = Evaluation("data/output/search_results/dataset_docs_public.json",
                                 "data/datasets/AnsweredQuestions/dataset_docs_public.json")
         evaluation.print_report()
