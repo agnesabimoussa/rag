@@ -1,83 +1,100 @@
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 import json
 from pydantic import TypeAdapter, ValidationError
-from src.data_models.answered_question import AnsweredQuestion
-from src.data_models.minimal_source import MinimalSource
-from src.data_models.search_result import StudentSearchResults
+from src.data_models.search_result import StudentSearchResults, MinimalSearchResults
+from src.data_models.rag_dataset import RagDataset
 from src.error_handling_modules.inavlid_json import InvalidJSON
-
-DEFAULT_KS: Tuple[int, ...] = (1, 3, 5, 10)
-DEFAULT_IOU_THRESHOLD = 0.05
-
-
-def _iou(first: MinimalSource, second: MinimalSource) -> float:
-    if first.file_path != second.file_path:
-        return 0.0
-    start = max(first.first_character_index, second.first_character_index)
-    end = min(first.last_character_index, second.last_character_index)
-    intersection = max(0, end - start)
-    union_start = min(first.first_character_index, second.first_character_index)
-    union_end = max(first.last_character_index, second.last_character_index)
-    union = union_end - union_start
-    return intersection / union if union > 0 else 0.0
+from src.error_handling_modules.invalid_test import InvalidTest
+from src.data_models.minimal_source import MinimalSource
+from src.data_models.answered_question import AnsweredQuestion
+from src.data_models.unanswered_question import UnansweredQuestion
 
 
-def recall_at_k(retrieved: List[MinimalSource],
-                correct: List[MinimalSource],
-                k: int,
-                iou_threshold: float = DEFAULT_IOU_THRESHOLD) -> float:
-    if not correct:
-        return 1.0
-    top_k = retrieved[:k]
-    found = sum(
-        1 for gt in correct
-        if any(_iou(gt, result) >= iou_threshold for result in top_k)
-    )
-    return found / len(correct)
-
-
+# recall@k = top k relevant chunks retrieved by the retrieval system / total relevant ground truth chunks
 class Evaluation:
-    def __init__(self, student_search_results_path: str, dataset_path: str) -> None:
-        self.student_search_results_path = Path(student_search_results_path)
-        self.dataset_path = Path(dataset_path)
-        self.student_results = self._load_student_results()
-        self.ground_truth = self._load_ground_truth()
+    def __init__(self,
+                 student_search_results_path: str,
+                 dataset_path: str) -> None:
+        self.__student_search_results_path = Path(student_search_results_path)
+        self.__dataset_path = Path(dataset_path)
+        self.__student_results: StudentSearchResults = Evaluation.__load_content(
+            self.__student_search_results_path, StudentSearchResults)
+        self.__ground_truth: RagDataset = Evaluation.__load_content(self.__dataset_path, RagDataset)
+        self.__validate()
 
-    def _load_student_results(self) -> StudentSearchResults:
+    @staticmethod
+    def __load_content(file: Path, type: Any) -> Any:
         try:
-            with open(self.student_search_results_path, "r", encoding="utf-8") as file:
+            with open(file, "r", encoding="utf-8") as file:
                 content = json.load(file)
-            return TypeAdapter(StudentSearchResults).validate_python(content)
+                return TypeAdapter(type).validate_python(content)
         except (ValidationError, json.JSONDecodeError, OSError):
             raise InvalidJSON("InvalidJSON exception occured."
-                              f"{self.student_search_results_path} contains invalid JSON.")
+                              f"{file} contains invalid JSON.")
 
-    def _load_ground_truth(self) -> Dict[str, List[MinimalSource]]:
-        try:
-            with open(self.dataset_path, "r", encoding="utf-8") as file:
-                content = json.load(file)
-            questions = TypeAdapter(List[AnsweredQuestion]).validate_python(
-                content["rag_questions"])
-            return {question.question_id: question.sources for question in questions}
-        except (ValidationError, json.JSONDecodeError, KeyError, TypeError, OSError):
-            raise InvalidJSON("InvalidJSON exception occured."
-                              f"{self.dataset_path} contains invalid JSON.")
+    def __validate(self) -> None:
+        if len(self.__student_results.search_results) != len(self.__ground_truth.rag_questions):
+            raise InvalidTest("InvalidTest: student results file and ground truth file"
+                              "should have the same number of questions.")
 
-    def report(self, ks: Optional[List[int]] = None) -> str:
-        resolved_ks = list(ks) if ks else list(DEFAULT_KS)
-        matched = [
-            (result.retrieved_sources, self.ground_truth[result.question_id])
-            for result in self.student_results.search_results
-            if result.question_id in self.ground_truth
-        ]
-        lines = [f"Questions evaluated: {len(matched)}"]
-        for k in resolved_ks:
-            if not matched:
-                lines.append(f"Recall@{k}: n/a (no matching question_ids)")
+    @staticmethod
+    def __calculate_iou(
+        retrieved_start: int,
+        retrieved_end: int,
+        ground_start: int,
+        ground_end: int
+    ) -> float:
+        intersection = max(
+            0,
+            min(retrieved_end, ground_end) - max(retrieved_start, ground_start)
+        )
+        union = max(retrieved_end, ground_end) - min(retrieved_start, ground_start)
+        return intersection / union
+
+    def evaluate(self, k: int = 5) -> float:
+        if k <= 0:
+            k = 5
+
+        search_results: List[MinimalSearchResults] = self.__student_results.search_results
+        search_answers: List[AnsweredQuestion | UnansweredQuestion] = self.__ground_truth.rag_questions
+
+        size = len(search_results)
+        total_recall = 0.0
+
+        for i in range(size):
+            if search_answers[i].question != search_results[i].question:
+                raise InvalidTest(
+                    "InvalidTest: student results file and ground truth file "
+                    "should contain the same questions in the same order."
+                )
+
+            student_sources = search_results[i].retrieved_sources[:k]
+            ground_truth_sources = search_answers[i].sources
+
+            if not ground_truth_sources:
                 continue
-            mean_recall = sum(
-                recall_at_k(retrieved, correct, k) for retrieved, correct in matched
-            ) / len(matched)
-            lines.append(f"Recall@{k}: {mean_recall:.3f} ({mean_recall * 100:.1f}%)")
-        return "\n".join(lines)
+
+            correct_sources = 0
+
+            for source in ground_truth_sources:
+                for student_source in student_sources:
+                    if (
+                        student_source.file_path == source.file_path
+                        and self.__calculate_iou(
+                            student_source.first_character_index,
+                            student_source.last_character_index,
+                            source.first_character_index,
+                            source.last_character_index
+                        ) >= 0.05
+                    ):
+                        correct_sources += 1
+                        break
+
+            question_recall = correct_sources / len(ground_truth_sources)
+            total_recall += question_recall
+
+        return total_recall / size if size > 0 else 0.0
+
+    def print_report(self) -> None:
+        pass
