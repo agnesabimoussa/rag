@@ -3,6 +3,7 @@ from pathlib import Path
 import pickle
 from rank_bm25 import BM25Okapi
 from src.chunking_modules.chunk import (Chunk, MarkdownChunk, CodeChunk)
+from src.text_processing import tokenize_text
 from tqdm import tqdm
 
 
@@ -26,7 +27,7 @@ class Indexing:
             The built `BM25Okapi` index.
         """
         tokenized_chunks = [
-            chunk.text.lower().split()
+            tokenize_text(self._chunk_index_text(chunk))
             for chunk in tqdm(self.chunks, desc="Tokenizing")
         ]
         bm25 = BM25Okapi(tokenized_chunks)
@@ -35,3 +36,12 @@ class Indexing:
         with output_path.open("wb") as file:
             pickle.dump(bm25, file)
         return bm25
+
+    @staticmethod
+    def _chunk_index_text(chunk: Chunk) -> str:
+        index_text = chunk.text
+        if isinstance(chunk, MarkdownChunk) and chunk.section:
+            index_text = f"{chunk.section}\n{index_text}"
+        if isinstance(chunk, CodeChunk) and chunk.type:
+            index_text = f"{chunk.type}\n{index_text}"
+        return index_text

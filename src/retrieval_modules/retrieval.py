@@ -4,8 +4,10 @@ from src.error_handling_modules.inavlid_json import InvalidJSON
 from src.data_models.search_result import (StudentSearchResults,
                                            MinimalSearchResults)
 from src.chunking_modules.chunk import Chunk
+from src.text_processing import tokenize_text
 from rank_bm25 import BM25Okapi
 from pathlib import Path
+import heapq
 from typing import List, Optional
 import json
 import pickle
@@ -35,10 +37,14 @@ class Retrieval:
                        dataset_path: Optional[str] = None,
                        save_directory: Optional[str] = None) -> "Retrieval":
         index_path = Path(index_dir)
-        py_chunk_file = index_path / "code_chunk_file.json"
-        md_chunk_file = index_path / "markdown_chunk_file.json"
+        py_chunk_file = index_path / "code_chunks.json"
+        if not py_chunk_file.is_file():
+            py_chunk_file = index_path / "code_chunk_file.json"
+        md_chunk_file = index_path / "markdown_chunks.json"
+        if not md_chunk_file.is_file():
+            md_chunk_file = index_path / "markdown_chunk_file.json"
         bm25_file = index_path / "bm25_index.pkl"
-        if not py_chunk_file.is_file() or not bm25_file.is_file() or not md_chunk_file:
+        if not py_chunk_file.is_file() or not bm25_file.is_file() or not md_chunk_file.is_file():
             raise FileNotFoundError(
                 f"No index found under {index_dir}. Run the `index` command first."
             )
@@ -54,49 +60,31 @@ class Retrieval:
     # Find the best matching chunk, then use the remaining context slots to retrieve chunks
     # from the same original source so the LLM gets more surrounding context.
     def retrieve_context(self, prompt: str) -> List[MinimalSource]:
-        tokenized_query = prompt.lower().split()
-        top_chunk = self.bm25.get_top_n(
-            tokenized_query,
-            self.chunks,
-            n=1
-        )[0]
-        top_chunks = [top_chunk]
-        remaining_slots = self.k - 1
-        original_chunk_id = top_chunk.original_chunk_id
+        tokenized_query = tokenize_text(prompt)
+        if not tokenized_query:
+            tokenized_query = prompt.lower().split()
 
-        if original_chunk_id:
-            related_chunks = [
-                chunk
-                for chunk in self.chunks
-                if chunk.original_chunk_id == original_chunk_id
-                and chunk.id != top_chunk.id
-            ]
-            original_chunk = next(
-                (
-                    chunk
-                    for chunk in self.chunks
-                    if chunk.id == original_chunk_id
-                ),
-                None
+        scores = self.bm25.get_scores(tokenized_query)
+        candidate_pool = min(len(self.chunks), max(self.k * 8, 40))
+        ranked_indices = [
+            index
+            for index, _ in heapq.nlargest(
+                candidate_pool,
+                enumerate(scores),
+                key=lambda item: item[1],
             )
-            if original_chunk and original_chunk.id != top_chunk.id:
-                related_chunks.append(original_chunk)
-            top_chunks.extend(related_chunks[:remaining_slots])
-
-        else:
-            ranked_chunks = self.bm25.get_top_n(
-                tokenized_query,
-                self.chunks,
-                n=self.k
-            )
-            top_chunks.extend(
-                chunk for chunk in ranked_chunks if chunk.id != top_chunk.id
-            )
+        ]
+        ranked_chunks = [self.chunks[index] for index in ranked_indices]
 
         unique_chunks = []
+        seen_groups = set()
         seen_chunk_ids = set()
         seen_source_spans = set()
-        for chunk in top_chunks:
+
+        for chunk in ranked_chunks:
+            group_id = chunk.original_chunk_id or chunk.id
+            if group_id in seen_groups:
+                continue
             source_span = (
                 chunk.source,
                 chunk.first_character_index,
@@ -104,10 +92,26 @@ class Retrieval:
             )
             if chunk.id not in seen_chunk_ids and source_span not in seen_source_spans:
                 unique_chunks.append(chunk)
+                seen_groups.add(group_id)
                 seen_chunk_ids.add(chunk.id)
                 seen_source_spans.add(source_span)
             if len(unique_chunks) == self.k:
                 break
+
+        if len(unique_chunks) < self.k:
+            for chunk in ranked_chunks:
+                source_span = (
+                    chunk.source,
+                    chunk.first_character_index,
+                    chunk.last_character_index,
+                )
+                if chunk.id in seen_chunk_ids or source_span in seen_source_spans:
+                    continue
+                unique_chunks.append(chunk)
+                seen_chunk_ids.add(chunk.id)
+                seen_source_spans.add(source_span)
+                if len(unique_chunks) == self.k:
+                    break
 
         return [
             MinimalSource(

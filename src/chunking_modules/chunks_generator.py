@@ -105,7 +105,7 @@ class Chunking:
                 f"Input directory does not exist: {self.corpus_path}"
             )
 
-        file_paths = list(self.corpus_path.rglob("*"))
+        file_paths = sorted(self.corpus_path.rglob("*"))
         for file_path in tqdm(file_paths, desc="Chunking"):
             if file_path.is_file() and file_path.suffix.lower() == ".md":
                 self.markdown_files.append(file_path)

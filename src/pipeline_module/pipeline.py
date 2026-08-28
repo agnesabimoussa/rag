@@ -25,13 +25,15 @@ class Pipeline:
             bm25,
             "data/output/search_results/",
             "data/datasets/UnansweredQuestions/dataset_code_public.json",
-            chunks)
+            chunks,
+            k=10)
         retrieval.write_search_results()
         retrieval = Retrieval(
             bm25,
             "data/output/search_results/",
             "data/datasets/UnansweredQuestions/dataset_docs_public.json",
-            chunks)
+            chunks,
+            k=10)
         retrieval.write_search_results()
         answer_generator = AnswerGenerator("data/output/search_results/dataset_code_public.json",
                                            "data/output/search_results_and_answer/")
