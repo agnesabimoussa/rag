@@ -3,8 +3,6 @@ from pathlib import Path
 from src.chunking_modules.chunk import MarkdownChunk
 from src.chunking_modules.abstract_chunker import AbstractChunker
 from langchain_text_splitters import MarkdownHeaderTextSplitter
-from langchain_experimental.text_splitter import SemanticChunker
-from langchain_huggingface import HuggingFaceEmbeddings
 
 
 class MarkdwonChunking(AbstractChunker):
@@ -24,13 +22,6 @@ class MarkdwonChunking(AbstractChunker):
             headers_to_split_on=self.headers,
             strip_headers=True,
         )
-        self.semantic_splitter = SemanticChunker(
-            embeddings=HuggingFaceEmbeddings(
-                model_name="sentence-transformers/all-MiniLM-L6-v2"
-            ),
-            breakpoint_threshold_type="percentile",
-            breakpoint_threshold_amount=95,
-        )
 
     def make_chunk(self, text, source, first_char_idx, last_char_idx,
                    original_chunk_id, section: str) -> MarkdownChunk:
@@ -44,14 +35,10 @@ class MarkdwonChunking(AbstractChunker):
                              section=section
                              )
 
-    def semantic_chunk_section(self, text: str) -> list[str]:
+    def split_section(self, text: str) -> list[str]:
         if len(text) <= self.max_chunk_size:
             return [text]
-        semantic_chunks = self.semantic_splitter.split_text(text)
-        final = []
-        for sc in semantic_chunks:
-            final.extend(self.enforce_char_limit(sc))
-        return final
+        return self.enforce_char_limit(text)
 
     def chunk_file(self, file_name: Path, content: str) -> List[MarkdownChunk]:
         results = []
@@ -63,7 +50,7 @@ class MarkdwonChunking(AbstractChunker):
             section_text = chunk.page_content
             section_start, section_end = self.find_span(content, section_text, search_cursor)
             search_cursor = section_end
-            sub_texts = self.semantic_chunk_section(section_text)
+            sub_texts = self.split_section(section_text)
             sub_spans: list[tuple[str, int, int]] = []
             sub_cursor = 0
             for text in sub_texts:
