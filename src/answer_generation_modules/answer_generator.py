@@ -119,7 +119,7 @@ Answer directly and concisely. Be coherent and understandable, grounded in the p
     def write_answers(self) -> None:
         answers = self.answer_dataset()
         full_path = self.save_dir / self.student_search_results_path.name
-        full_path.mkdir(parents=True, exist_ok=True)
+        full_path.parent.mkdir(parents=True, exist_ok=True)
         with open(full_path, "w", encoding="utf-8") as file:
             json.dump(answers.model_dump(),
                       file,

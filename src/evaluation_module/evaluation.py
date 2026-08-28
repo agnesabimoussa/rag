@@ -97,4 +97,15 @@ class Evaluation:
         return total_recall / size if size > 0 else 0.0
 
     def print_report(self) -> None:
-        pass
+        recall1 = self.evaluate(1)
+        recall3 = self.evaluate(3)
+        recall5 = self.evaluate(5)
+        recall10 = self.evaluate(10)
+
+        print("\nEvaluation Results")
+        print("=" * 60)
+        print(f"Questions evaluated: {len(self.__student_results.search_results)}")
+        print(f"Recall@1:  {recall1:.3f} ({recall1 * 100:.1f}%)")
+        print(f"Recall@3:  {recall3:.3f} ({recall3 * 100:.1f}%)")
+        print(f"Recall@5:  {recall5:.3f} ({recall5 * 100:.1f}%)")
+        print(f"Recall@10: {recall10:.3f} ({recall10 * 100:.1f}%)")
