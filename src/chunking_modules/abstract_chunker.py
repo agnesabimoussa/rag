@@ -12,13 +12,41 @@ class AbstractChunker(ABC):
 
     @staticmethod
     def find_span(text: str, target: str, cursor: int = 0) -> tuple[int, int]:
-        """Find an exact substring span and return start/end-exclusive offsets."""
+        """Find a target's source span, tolerating splitter-only whitespace changes.
+
+        ``MarkdownHeaderTextSplitter`` removes indentation from some Markdown
+        blocks (notably HTML blocks).  Match exactly where possible, then fall
+        back to a whitespace-insensitive match while returning offsets in the
+        original source text.
+        """
         start = text.find(target, cursor)
         if start == -1:
             start = text.find(target)
-        if start == -1:
+        if start != -1:
+            return start, start + len(target)
+
+        normalized_text = []
+        source_positions = []
+        for index, char in enumerate(text):
+            if not char.isspace():
+                normalized_text.append(char)
+                source_positions.append(index)
+        normalized_target = "".join(char for char in target if not char.isspace())
+        if not normalized_target:
+            raise ValueError(f"Could not locate non-whitespace text: {target[:80]!r}")
+
+        normalized_source = "".join(normalized_text)
+        normalized_cursor = next(
+            (index for index, position in enumerate(source_positions) if position >= cursor),
+            len(normalized_source),
+        )
+        normalized_start = normalized_source.find(normalized_target, normalized_cursor)
+        if normalized_start == -1:
+            normalized_start = normalized_source.find(normalized_target)
+        if normalized_start == -1:
             raise ValueError(f"Could not locate text: {target[:80]!r}")
-        return start, start + len(target)
+        normalized_end = normalized_start + len(normalized_target) - 1
+        return source_positions[normalized_start], source_positions[normalized_end] + 1
 
     @staticmethod
     def read_file(file: Path) -> str:

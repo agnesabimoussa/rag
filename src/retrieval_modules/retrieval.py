@@ -51,7 +51,7 @@ class Retrieval:
             bm25 = pickle.load(file)
         return cls(bm25, save_directory, dataset_path, chunks, k)
 
-    # Find the best matching chunk, then use the remaining context slots to retrieve chunks 
+    # Find the best matching chunk, then use the remaining context slots to retrieve chunks
     # from the same original source so the LLM gets more surrounding context.
     def retrieve_context(self, prompt: str) -> List[MinimalSource]:
         tokenized_query = prompt.lower().split()
@@ -61,7 +61,7 @@ class Retrieval:
             n=1
         )[0]
         top_chunks = [top_chunk]
-        k = self.k - 1
+        remaining_slots = self.k - 1
         original_chunk_id = top_chunk.original_chunk_id
 
         if original_chunk_id:
@@ -81,16 +81,33 @@ class Retrieval:
             )
             if original_chunk and original_chunk.id != top_chunk.id:
                 related_chunks.append(original_chunk)
-            top_chunks.extend(related_chunks[:k])
+            top_chunks.extend(related_chunks[:remaining_slots])
 
         else:
-            top_chunks.extend(
-                self.bm25.get_top_n(
-                    tokenized_query,
-                    self.chunks,
-                    n=k
-                )
+            ranked_chunks = self.bm25.get_top_n(
+                tokenized_query,
+                self.chunks,
+                n=self.k
             )
+            top_chunks.extend(
+                chunk for chunk in ranked_chunks if chunk.id != top_chunk.id
+            )
+
+        unique_chunks = []
+        seen_chunk_ids = set()
+        seen_source_spans = set()
+        for chunk in top_chunks:
+            source_span = (
+                chunk.source,
+                chunk.first_character_index,
+                chunk.last_character_index,
+            )
+            if chunk.id not in seen_chunk_ids and source_span not in seen_source_spans:
+                unique_chunks.append(chunk)
+                seen_chunk_ids.add(chunk.id)
+                seen_source_spans.add(source_span)
+            if len(unique_chunks) == self.k:
+                break
 
         return [
             MinimalSource(
@@ -98,7 +115,7 @@ class Retrieval:
                 first_character_index=chunk.first_character_index,
                 last_character_index=chunk.last_character_index
             )
-            for chunk in top_chunks
+            for chunk in unique_chunks
         ]
 
     def _load_dataset(self) -> List[UnansweredQuestion]:
