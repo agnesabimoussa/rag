@@ -13,17 +13,8 @@ from src.data_models.search_result import MinimalSearchResults
 from src.retrieval_modules.retrieval import Retrieval
 from src.models.language_model import LLM
 
+
 def create_app(index_dir: str = "data/processed") -> FastAPI:
-    """Build the FastAPI app exposing `/search` and `/answer`.
-
-    Args:
-        index_dir: Directory containing the persisted index (see `index`).
-        model_path: HuggingFace repo id of the answer-generation model.
-            Loaded once at startup and reused across requests.
-
-    Returns:
-        A configured FastAPI application.
-    """
     app = FastAPI(title="RAG against the machine")
 
     @app.post("/search", response_model=List[MinimalSource])

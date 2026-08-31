@@ -24,7 +24,6 @@ class Pipeline:
         vector_indexing.create_index()
         # 3 - retrieval - retrieve relevant documents for all questions in
         # datasets_public/public/
-        # save dir, questions file
         retrieval = Retrieval(
             bm25,
             "data/output/search_results/",
@@ -39,6 +38,7 @@ class Pipeline:
             chunks,
             k=10)
         retrieval.write_search_results()
+        # Bonus: semantic retrieval
         # answer_generator = AnswerGenerator("data/output/search_results/dataset_code_public.json",
         #                                    "data/output/search_results_and_answer/")
         # answer_generator.write_answers()
@@ -51,6 +51,8 @@ class Pipeline:
         evaluation = Evaluation("data/output/search_results/dataset_code_public.json",
                                 "data/datasets/AnsweredQuestions/dataset_code_public.json")
         evaluation.print_report()
+        # Bonus: serve app
+        Pipeline.serve()
 
     @staticmethod
     def index(max_chunk_size: int = 2000,
@@ -60,8 +62,8 @@ class Pipeline:
             chunking = Chunking("data/raw", "data/processed/")
             chunks = chunking.apply_chunking()
             # 2 - indexing: save bm25 index to data/processed/bm25_index.pkl
-            indexing = Indexing(chunks, "data/processed/bm25_index.pkl")
-            bm25 = indexing.create_index()
+            indexing = LexicalIndexing(chunks, "data/processed/bm25_index.pkl")
+            indexing.create_index()
             print(f"Ingestion complete! Indexed {len(chunks)} chunks under {output_dir}/")
         except FileNotFoundError as error:
             print(error)
@@ -134,7 +136,7 @@ class Pipeline:
             print(error)
 
     @staticmethod
-    def serve(host: str = "127.0.0.1", port: int = 8000,
+    def serve(host: str = "0.0.0.0", port: int = 8000,
               index_dir: str = "data/processed") -> None:
         import uvicorn
         from src.http_api_module.app import create_app
