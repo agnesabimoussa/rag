@@ -1,6 +1,6 @@
 # subtype of Indexing
 from src.models.embedding_model import EmbeddingModel
-from src.indexing_module.chunks_indexing import Indexing
+from src.indexing_module.indexing import Indexing
 from src.chunking_modules.chunk import Chunk
 import chromadb
 from typing import List
