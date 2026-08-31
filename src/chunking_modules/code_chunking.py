@@ -115,8 +115,8 @@ class CodeChunking(AbstractChunker):
                          original_chunk_id=original_chunk_id,
                          type=type,
                          parent_id=parent_id,
-                          child_ids=child_ids
-                          )
+                         child_ids=child_ids
+                         )
 
     def chunk_file(self, file_name: Path, content: str) -> List[CodeChunk]:
         chunks: List[CodeChunk] = []

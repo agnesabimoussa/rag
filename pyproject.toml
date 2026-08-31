@@ -11,6 +11,7 @@ dependencies = [
     "accelerate>=1.14.0",
     "bm25>=0.3.10",
     "chonkie>=1.7.0",
+    "chromadb>=1.5.9",
     "dotenv>=0.9.9",
     "fastapi>=0.141.1",
     "fire>=0.7.1",

@@ -5,45 +5,22 @@ from src.data_models.search_answer import (StudentSearchResultsAndAnswer,
 from src.data_models.minimal_source import MinimalSource
 from src.error_handling_modules.inavlid_json import InvalidJSON
 from pathlib import Path
-from typing import Optional, List, Dict
 from pydantic import TypeAdapter, ValidationError
+from typing import List
 import json
-import torch
-from huggingface_hub import snapshot_download
-from transformers import AutoTokenizer, AutoModelForCausalLM
 from tqdm import tqdm
+from src.models.language_model import LLM
 
 
 class AnswerGenerator:
     def __init__(self,
                  student_search_results_path: str,
-                 save_dir: str,
-                 system_prompt: Optional[str] = None,
-                 model_path: str = "Qwen/Qwen3-0.6B") -> None:
+                 save_dir: str) -> None:
         self.student_search_results_path = Path(student_search_results_path)
         self.save_dir = Path(save_dir)
         self.search_results = self._read_search_results()
         self.k = self.search_results.k
-        if not system_prompt:
-            system_prompt = """You are a careful assistant answering questions from the retrieved source context only.
-Answer directly and concisely. Be coherent and understandable, grounded in the provided sources. Answer in 1-2 sentences only.
-"""
-        self.system_prompt = system_prompt
-        local_weights_dir = self._ensure_local_weights(model_path)
-        self.tokenizer = AutoTokenizer.from_pretrained(local_weights_dir)
-        self.model = AutoModelForCausalLM.from_pretrained(
-            local_weights_dir,
-            torch_dtype="auto",
-            device_map="auto",
-        )
-
-    @staticmethod
-    def _ensure_local_weights(model_path: str) -> str:
-        slug = model_path.split("/")[-1].lower()
-        local_dir = Path("models") / slug
-        if not (local_dir / "config.json").is_file():
-            snapshot_download(repo_id=model_path, local_dir=str(local_dir))
-        return str(local_dir)
+        self.model = LLM()
 
     def _read_search_results(self) -> StudentSearchResults:
         try:
@@ -54,31 +31,6 @@ Answer directly and concisely. Be coherent and understandable, grounded in the p
         except (ValidationError, json.JSONDecodeError):
             raise InvalidJSON("InvalidJSON exception occured."
                               f"{self.student_search_results_path} contains invalid JSON.")
-
-    def _get_final_response(self, messages: Dict[str, str]) -> str:
-        inputs = self.tokenizer.apply_chat_template(
-            messages,
-            tokenize=True,
-            add_generation_prompt=True,
-            enable_thinking=False,
-            return_dict=True,
-            return_tensors="pt",
-        ).to(self.model.device)
-        with torch.no_grad():
-            outputs = self.model.generate(
-                **inputs,
-                max_new_tokens=1000,
-                do_sample=True,
-                temperature=0.7,
-                top_p=0.8,
-                top_k=20,
-                repetition_penalty=1.05,
-            )
-        answer: str = self.tokenizer.decode(
-            outputs[0][inputs["input_ids"].shape[-1]:],
-            skip_special_tokens=True,
-        )
-        return str(answer)
 
     def _get_retrieved_context(self, sources: List[MinimalSource]) -> str:
         context = []
@@ -92,20 +44,13 @@ Answer directly and concisely. Be coherent and understandable, grounded in the p
         return "\n\n".join(context)
 
     def answer_prompt(self, question: MinimalSearchResults) -> str:
-        retrieved_context = self._get_retrieved_context(
+        messages = []
+        context = self._get_retrieved_context(
             question.retrieved_sources
         )
-        system_prompt = (
-            self.system_prompt
-            + "\n\nRetrieved source context:\n"
-            + retrieved_context
-        )
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": question.question}
-        ]
-
-        response = self._get_final_response(messages)
+        self.model.add_user_message(messages, context)
+        self.model.add_user_message(messages, question.question)
+        response = self.model.chat(messages)
         return response
 
     def answer_dataset(self) -> StudentSearchResultsAndAnswer:

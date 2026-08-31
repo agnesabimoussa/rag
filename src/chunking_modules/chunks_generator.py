@@ -2,13 +2,12 @@
 
 import bisect
 import json
-import itertools
 from pathlib import Path
 from typing import List, Tuple
 from tqdm import tqdm
 from src.chunking_modules.code_chunking import CodeChunking
 from src.chunking_modules.markdown_chunking import MarkdwonChunking
-from src.chunking_modules.chunk import (MarkdownChunk, CodeChunk)
+from src.chunking_modules.chunk import Chunk
 
 
 def _normalize_with_positions(text: str) -> Tuple[str, List[int]]:
@@ -113,7 +112,7 @@ class Chunking:
                 self.python_files.append(file_path)
 
     @staticmethod
-    def write_result(path: Path, file_name: str, content: List[MarkdownChunk] | List[CodeChunk]) -> None:
+    def write_result(path: Path, file_name: str, content: List[Chunk]) -> None:
         full_path = path / file_name
         full_path.parent.mkdir(parents=True, exist_ok=True)
         with full_path.open("w", encoding="utf-8") as file:
@@ -123,7 +122,7 @@ class Chunking:
                 indent=4
             )
 
-    def apply_chunking(self) -> List[MarkdownChunk | CodeChunk]:
+    def apply_chunking(self) -> List[Chunk]:
         markdown_chunks = self.markdown_chunking_strategy.chunk_files(self.markdown_files)
         code_chunks = self.code_chunking_strategy.chunk_files(self.python_files)
         self.write_result(self.output_dir, "markdown_chunks.json", markdown_chunks)

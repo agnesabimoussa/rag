@@ -1,22 +1,19 @@
 """Local HTTP API (bonus): exposes retrieval and answer generation over
-plain HTTP, so the system can be driven by something other than the CLI
-(subject Ch. IX, bonus 5). Reuses the same `Retrieval`/`AnswerGenerator`
+plain HTTP, so the system can be driven by something other than the CLI.
+Reuses the same `Retrieval`/`AnswerGenerator`
 classes as the CLI — no duplicated logic.
 """
 import uuid
 from typing import List
-
 from fastapi import FastAPI, HTTPException
-
-from src.answer_generation_modules.answer_generator import AnswerGenerator, DEFAULT_MODEL
+from src.answer_generation_modules.answer_generator import AnswerGenerator
 from src.data_models.minimal_source import MinimalSource
 from src.data_models.search_answer import MinimalAnswer
 from src.data_models.search_result import MinimalSearchResults
 from src.retrieval_modules.retrieval import Retrieval
+from src.models.language_model import LLM
 
-
-def create_app(index_dir: str = "data/processed",
-               model_path: str = DEFAULT_MODEL) -> FastAPI:
+def create_app(index_dir: str = "data/processed") -> FastAPI:
     """Build the FastAPI app exposing `/search` and `/answer`.
 
     Args:
@@ -27,10 +24,9 @@ def create_app(index_dir: str = "data/processed",
     Returns:
         A configured FastAPI application.
     """
-    app = FastAPI(title="RAG against the machine - Local API")
-    generator = AnswerGenerator(model_path=model_path)
+    app = FastAPI(title="RAG against the machine")
 
-    @app.get("/search", response_model=List[MinimalSource])
+    @app.post("/search", response_model=List[MinimalSource])
     def search(query: str, k: int = 5) -> List[MinimalSource]:
         """Return the top-k sources for `query`."""
         if not query.strip():
@@ -41,7 +37,7 @@ def create_app(index_dir: str = "data/processed",
             raise HTTPException(status_code=503, detail=str(error))
         return retrieval.retrieve_context(query)
 
-    @app.get("/answer", response_model=MinimalAnswer)
+    @app.post("/answer", response_model=MinimalAnswer)
     def answer(query: str, k: int = 5) -> MinimalAnswer:
         """Retrieve context for `query` and generate a grounded answer."""
         if not query.strip():
@@ -55,6 +51,6 @@ def create_app(index_dir: str = "data/processed",
                                         question=query,
                                         retrieved_sources=sources)
         return MinimalAnswer(**question.model_dump(),
-                             answer=generator.answer_prompt(question))
+                             answer=LLM().chat())
 
     return app
