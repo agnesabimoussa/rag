@@ -26,6 +26,7 @@ class LexicalIndexing(Indexing):
         bm25 = BM25Okapi(tokenized_chunks)
         output_path = self.output_file
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        with output_path.open("wb") as file:
+        full_path = output_path / "bm25_index.pkl"
+        with full_path.open("wb") as file:
             pickle.dump(bm25, file)
         return bm25
