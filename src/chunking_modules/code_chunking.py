@@ -32,18 +32,6 @@ class CodeChunking(AbstractChunker):
         end = line_offsets[node.end_lineno - 1] + node.end_col_offset
         return start, end
 
-    @staticmethod
-    def _get_docstring_node(node: ast.AST) -> ast.Expr | None:
-        if not hasattr(node, "body") or not node.body:
-            return None
-        first_stmt = node.body[0]
-        if not isinstance(first_stmt, ast.Expr):
-            return None
-        value = first_stmt.value
-        if not isinstance(value, ast.Constant) or not isinstance(value.value, str):
-            return None
-        return first_stmt
-
     def _chunk_source_text(
         self,
         text: str,
@@ -75,34 +63,6 @@ class CodeChunking(AbstractChunker):
             cursor = sub_end_rel
         return first_chunk_id
 
-    def _chunk_body_statements(
-        self,
-        body: List[ast.stmt],
-        content: str,
-        file_name: Path,
-        chunks: List[CodeChunk],
-        line_offsets: List[int],
-        parent: Optional[str],
-        type_prefix: str,
-    ) -> None:
-        for stmt in body:
-            if isinstance(stmt, (ast.Import, ast.ImportFrom, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                continue
-            source_text = ast.get_source_segment(content, stmt) or ""
-            if not source_text.strip():
-                continue
-            start, _ = self._node_span(stmt, line_offsets)
-            self._chunk_source_text(
-                text=source_text,
-                source=str(file_name),
-                first_char_idx=start,
-                original_chunk_id=None,
-                type=f"{type_prefix}{stmt.__class__.__name__}",
-                parent_id=parent,
-                child_ids=None,
-                chunks=chunks,
-            )
-
     def make_chunk(self, text: str, source: str, first_char_idx: int, last_char_idx: int,
                    original_chunk_id: str | None, type: str | None, parent_id: str | None,
                    child_ids: List[str] | None) -> CodeChunk:
@@ -133,24 +93,8 @@ class CodeChunking(AbstractChunker):
             )
             return chunks
 
-        module_docstring_node = self._get_docstring_node(tree)
-        if module_docstring_node is not None:
-            module_docstring_source = ast.get_source_segment(content, module_docstring_node) or ""
-            module_docstring_start, _ = self._node_span(module_docstring_node, line_offsets)
-            self._chunk_source_text(
-                text=module_docstring_source,
-                source=str(file_name),
-                first_char_idx=module_docstring_start,
-                original_chunk_id=None,
-                type="ModuleDocstring",
-                parent_id=None,
-                child_ids=None,
-                chunks=chunks,
-            )
-
-        module_body = tree.body[1:] if module_docstring_node is not None else tree.body
-        self._chunk_body_statements(
-            module_body,
+        self._chunk_body(
+            tree.body,
             content,
             file_name,
             chunks,
@@ -158,74 +102,79 @@ class CodeChunking(AbstractChunker):
             parent=None,
             type_prefix="Module",
         )
-        self._walk(
-            tree,
-            content,
-            file_name,
-            chunks,
-            parent=None,
-            line_offsets=line_offsets,
-        )
         return chunks
 
-    def _walk(self,
-              node: ast.AST,
-              content: str,
-              file_name: Path,
-              chunks: List[CodeChunk],
-              parent: Optional[str],
-              line_offsets: List[int]) -> None:
-        for child in ast.iter_child_nodes(node):
-            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                first_chunk_id = self._chunk_function(
-                    child, content, file_name, chunks, parent, line_offsets
-                )
-                self._walk(child, content, file_name, chunks, parent=first_chunk_id, line_offsets=line_offsets)
+    # Greedily merges consecutive statements (including whole small
+    # functions/classes) into blocks up to max_chunk_size, mirroring how a
+    # size-based splitter would chunk the same source, instead of emitting
+    # one tiny chunk per statement. A single item too large to fit on its
+    # own is recursed into (classes) or hard-split by lines (functions and
+    # other statements), so only the pieces that actually need splitting
+    # end up split.
+    def _chunk_body(
+        self,
+        body: List[ast.stmt],
+        content: str,
+        file_name: Path,
+        chunks: List[CodeChunk],
+        line_offsets: List[int],
+        parent: Optional[str],
+        type_prefix: str,
+    ) -> None:
+        pending: List[ast.stmt] = []
 
-            elif isinstance(child, ast.ClassDef):
-                class_docstring_node = self._get_docstring_node(child)
-                if class_docstring_node is not None:
-                    class_docstring_source = ast.get_source_segment(content, class_docstring_node) or ""
-                    class_docstring_start, _ = self._node_span(class_docstring_node, line_offsets)
+        def flush() -> None:
+            if not pending:
+                return
+            start, _ = self._node_span(pending[0], line_offsets)
+            _, end = self._node_span(pending[-1], line_offsets)
+            text = content[start:end]
+            if text.strip():
+                self._chunk_source_text(
+                    text=text,
+                    source=str(file_name),
+                    first_char_idx=start,
+                    original_chunk_id=None,
+                    type=f"{type_prefix}Block",
+                    parent_id=parent,
+                    child_ids=None,
+                    chunks=chunks,
+                )
+            pending.clear()
+
+        for stmt in body:
+            if isinstance(stmt, (ast.Import, ast.ImportFrom)):
+                continue
+            start, end = self._node_span(stmt, line_offsets)
+            if end - start > self.max_chunk_size:
+                flush()
+                if isinstance(stmt, ast.ClassDef):
+                    self._chunk_body(
+                        stmt.body,
+                        content,
+                        file_name,
+                        chunks,
+                        line_offsets,
+                        parent=parent,
+                        type_prefix=f"{type_prefix}{stmt.name}",
+                    )
+                else:
+                    type_name = stmt.__class__.__name__
+                    text = ast.get_source_segment(content, stmt) or content[start:end]
                     self._chunk_source_text(
-                        text=class_docstring_source,
+                        text=text,
                         source=str(file_name),
-                        first_char_idx=class_docstring_start,
+                        first_char_idx=start,
                         original_chunk_id=None,
-                        type="ClassDocstring",
+                        type=f"{type_prefix}{type_name}",
                         parent_id=parent,
                         child_ids=None,
                         chunks=chunks,
                     )
-                class_body = child.body[1:] if class_docstring_node is not None else child.body
-                self._chunk_body_statements(
-                    class_body,
-                    content,
-                    file_name,
-                    chunks,
-                    line_offsets,
-                    parent=parent,
-                    type_prefix="Class",
-                )
-                self._walk(child, content, file_name, chunks, parent=parent, line_offsets=line_offsets)
-
-    def _chunk_function(self,
-                        node,
-                        content: str,
-                        file_name: Path,
-                        chunks: List[CodeChunk],
-                        parent: Optional[str],
-                        line_offsets: List[int]) -> str:
-        text = ast.get_source_segment(content, node) or ""
-        node_start, _ = self._node_span(node, line_offsets)
-        chunk_type = "AsyncFunction" if isinstance(node, ast.AsyncFunctionDef) else "Function"
-        return self._chunk_source_text(
-            text=text,
-            source=str(file_name),
-            first_char_idx=node_start,
-            original_chunk_id=None,
-            type=chunk_type,
-            parent_id=parent,
-            child_ids=None,
-            chunks=chunks,
-        )
+                continue
+            if pending:
+                pending_start, _ = self._node_span(pending[0], line_offsets)
+                if end - pending_start > self.max_chunk_size:
+                    flush()
+            pending.append(stmt)
+        flush()

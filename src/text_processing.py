@@ -31,9 +31,20 @@ def _split_camel_case(token: str) -> list[str]:
 
 @lru_cache(maxsize=4096)
 def tokenize_text(text: str) -> list[str]:
-    """Split technical text into normalized BM25 tokens."""
+    """Split technical text into normalized BM25 tokens.
+
+    Emits both the decomposed sub-words of each identifier (snake_case /
+    camelCase parts, stemmed) and, when an identifier has more than one
+    part, the identifier itself as a single whole token. Splitting alone
+    turns rare, highly specific identifiers (``cudagraph_inputs_embeds``,
+    ``GPUModelRunner``) into common word pieces (``model``, ``runner``)
+    that occur in nearly every file, drowning out the exact-identifier
+    match a code question usually depends on. Keeping the whole token
+    preserves that high-IDF exact match alongside the fuzzier sub-word one.
+    """
     tokens: list[str] = []
     for raw_token in _TOKEN_RE.findall(text):
+        pieces: list[str] = []
         for part in _SPLIT_RE.split(raw_token):
             if not part:
                 continue
@@ -44,4 +55,9 @@ def tokenize_text(text: str) -> list[str]:
                 if normalized.isalpha() and len(normalized) > 2:
                     normalized = _STEMMER.stem(normalized)
                 tokens.append(normalized)
+                pieces.append(normalized)
+        if len(pieces) > 1:
+            whole = "".join(char for char in raw_token if char.isalnum()).lower()
+            if whole:
+                tokens.append(whole)
     return tokens

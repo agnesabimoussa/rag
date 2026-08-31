@@ -48,10 +48,16 @@ class Retrieval:
             raise FileNotFoundError(
                 f"No index found under {index_dir}. Run the `index` command first."
             )
+        # Order must match Chunking.apply_chunking(), which returns
+        # markdown_chunks + code_chunks and is what the persisted BM25 index
+        # (data/processed/bm25_index.pkl) was built from — get_scores()
+        # returns positions in that fit order, so loading chunks back in a
+        # different order here would silently pair scores with the wrong
+        # chunk.
         chunks = []
-        with py_chunk_file.open("r", encoding="utf-8") as file:
-            chunks.extend(TypeAdapter(List[Chunk]).validate_python(json.load(file)))
         with md_chunk_file.open("r", encoding="utf-8") as file:
+            chunks.extend(TypeAdapter(List[Chunk]).validate_python(json.load(file)))
+        with py_chunk_file.open("r", encoding="utf-8") as file:
             chunks.extend(TypeAdapter(List[Chunk]).validate_python(json.load(file)))
         with bm25_file.open("rb") as file:
             bm25 = pickle.load(file)
