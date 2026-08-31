@@ -24,7 +24,7 @@ class Pipeline:
         vector_indexing.create_index()
         # 3 - retrieval - retrieve relevant documents for all questions in
         # datasets_public/public/
-        retrieval = Retrieval(bm25,chunks)
+        retrieval = Retrieval(bm25, chunks)
         retrieval.write_search_results()
         # Bonus: semantic retrieval
         answer_generator = AnswerGenerator()

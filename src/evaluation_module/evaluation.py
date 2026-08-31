@@ -1,12 +1,8 @@
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any
-import json
-from pydantic import TypeAdapter, ValidationError
+from typing import List, Tuple
 from src.data_models.search_result import StudentSearchResults, MinimalSearchResults
 from src.data_models.rag_dataset import RagDataset
-from src.error_handling_modules.inavlid_json import InvalidJSON
 from src.error_handling_modules.invalid_test import InvalidTest
-from src.data_models.minimal_source import MinimalSource
 from src.data_models.answered_question import AnsweredQuestion
 from src.data_models.unanswered_question import UnansweredQuestion
 from src.file_operations.file_operations import FileOperations
@@ -24,16 +20,6 @@ class Evaluation:
         self.__validate()
 
     @staticmethod
-    def __load_content(file: Path, type: Any) -> Any:
-        try:
-            with open(file, "r", encoding="utf-8") as opened:
-                content = json.load(opened)
-                return TypeAdapter(type).validate_python(content)
-        except (ValidationError, json.JSONDecodeError, OSError):
-            raise InvalidJSON("InvalidJSON exception occured."
-                              f"{file} contains invalid JSON.")
-
-    @staticmethod
     def __load_cases(student_search_results_path: Path,
                      dataset_path: Path) -> List[Tuple[str, StudentSearchResults, RagDataset]]:
         student_files = FileOperations.resolve_files(student_search_results_path, ".json")
@@ -48,8 +34,8 @@ class Evaluation:
                     "InvalidTest: no ground truth file found matching "
                     f"{student_file.name} under {dataset_path}."
                 )
-            student_results = Evaluation.__load_content(student_file, StudentSearchResults)
-            ground_truth = Evaluation.__load_content(ground_truth_file, RagDataset)
+            student_results = FileOperations.load_content(student_file, StudentSearchResults)
+            ground_truth = FileOperations.load_content(ground_truth_file, RagDataset)
             cases.append((student_file.name, student_results, ground_truth))
         return cases
 

@@ -5,7 +5,6 @@ from src.data_models.search_result import (StudentSearchResults,
                                            MinimalSearchResults)
 from src.chunking_modules.chunk import Chunk, CodeChunk, MarkdownChunk
 from src.text_processing import tokenize_text
-from src.file_operations.file_operations import FileOperations
 from rank_bm25 import BM25Okapi
 from pathlib import Path
 import heapq
@@ -14,6 +13,7 @@ import json
 import pickle
 from pydantic import TypeAdapter, ValidationError
 from tqdm import tqdm
+from src.file_operations.file_operations import FileOperations
 
 
 class Retrieval:
