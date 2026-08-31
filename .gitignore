@@ -1,12 +1,11 @@
 .venv
 vllm-0.10.1/
-moulinette
 __pycache__
 data/raw/
 example.py
 inputs/
 .env
-models/
 .mypy_cache/
 .pytest_cache/
 *.egg-info/
+models/qwen3-0.6b
