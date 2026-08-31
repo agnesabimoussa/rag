@@ -91,16 +91,30 @@ Measured with `uv run python -m src evaluate` against the public
 
 | Dataset | Recall@1 | Recall@3 | Recall@5 | Recall@10 | Target (Recall@5) |
 |---|---|---|---|---|---|
-| docs | 50.0% | 64.0% | **69.0%** | 71.0% | 80% |
-| code | 11.1% | 14.1% | **16.2%** | 18.2% | 50% |
+| docs | 61.0% | 79.0% | **83.0%** | 84.0% | 80% |
+| code | 49.5% | 67.7% | **75.8%** | 82.8% | 50% |
 
-Both are currently below the subject's thresholds. Pure BM25 with naive
-lowercase/whitespace tokenization struggles most on code questions, where the
-vocabulary gap between a natural-language question and identifier-heavy source
-(`snake_case`, camelCase, punctuation) is largest. Closing this gap (better
-tokenization, e.g. splitting identifiers; semantic embeddings; hybrid
-lexical+semantic ranking) is the natural next step but was out of scope for this
-pass, which focused on building a correct, spec-compliant pipeline end to end.
+Both are now above the subject's thresholds. Two fixes drove most of the gain
+over the original pure-lowercase/whitespace-split BM25 baseline (50%/64%/69%/71%
+docs, 11%/14%/16%/18% code):
+
+- **Dual tokenization** (`src/text_processing.py`): splitting identifiers into
+  sub-words (`cudagraph_inputs_embeds` -> `cudagraph`, `input`, `emb`) closes
+  some of the natural-language/identifier vocabulary gap, but on its own it
+  destroys the specificity of rare compound identifiers — their pieces
+  (`model`, `runner`, ...) are common across the whole codebase, so the exact
+  identifier's high IDF signal was getting diluted into noise. Emitting the
+  whole identifier as an additional token alongside its sub-words keeps both:
+  fuzzy sub-word matches and exact rare-identifier matches.
+- **Size-aware AST chunk merging** (`src/chunking_modules/code_chunking.py`):
+  the previous chunker emitted one chunk per top-level statement/method, which
+  fragmented naturally-related code (e.g. a class docstring, its field
+  declarations, and its `__init__`, or a run of module-level constants) into
+  chunks far smaller than what a question's ground-truth span covers, tanking
+  the recall metric's IoU-overlap check even when the right region was found.
+  Consecutive statements (including whole small functions/classes) are now
+  greedily merged into blocks up to `max_chunk_size`, recursing into a single
+  item only when it doesn't fit on its own.
 
 Indexing the full corpus (~3,200 files, ~14,900 chunks) takes ~3 seconds, well
 under the 5-minute budget. `search_dataset` over 100 questions takes ~2 seconds,

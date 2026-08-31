@@ -13,34 +13,34 @@ class Pipeline:
     @staticmethod
     def run_pipeline() -> None:
         # 1 - chunking: write to data/processed/
-        chunking = Chunking("data/raw", "data/processed/", 2000)
-        chunks = chunking.apply_chunking()
-        # 2 - indexing: save bm25 index to data/processed/bm25_index.pkl
-        indexing = Indexing(chunks, "data/processed/bm25_index.pkl")
-        bm25 = indexing.create_index()
-        # 3 - retrieval - retrieve relevant documents for all questions in
-        # datasets_public/public/
-        # save dir, questions file
-        retrieval = Retrieval(
-            bm25,
-            "data/output/search_results/",
-            "data/datasets/UnansweredQuestions/dataset_code_public.json",
-            chunks,
-            k=10)
-        retrieval.write_search_results()
-        retrieval = Retrieval(
-            bm25,
-            "data/output/search_results/",
-            "data/datasets/UnansweredQuestions/dataset_docs_public.json",
-            chunks,
-            k=10)
-        retrieval.write_search_results()
-        # answer_generator = AnswerGenerator("data/output/search_results/dataset_code_public.json",
-        #                                    "data/output/search_results_and_answer/")
-        # answer_generator.write_answers()
-        # answer_generator = AnswerGenerator("data/output/search_results/dataset_docs_public.json",
-        #                                    "data/output/search_results_and_answer/")
-        # answer_generator.write_answers()
+        # chunking = Chunking("data/raw", "data/processed/", 2000)
+        # chunks = chunking.apply_chunking()
+        # # 2 - indexing: save bm25 index to data/processed/bm25_index.pkl
+        # indexing = Indexing(chunks, "data/processed/bm25_index.pkl")
+        # bm25 = indexing.create_index()
+        # # 3 - retrieval - retrieve relevant documents for all questions in
+        # # datasets_public/public/
+        # # save dir, questions file
+        # retrieval = Retrieval(
+        #     bm25,
+        #     "data/output/search_results/",
+        #     "data/datasets/UnansweredQuestions/dataset_code_public.json",
+        #     chunks,
+        #     k=10)
+        # retrieval.write_search_results()
+        # retrieval = Retrieval(
+        #     bm25,
+        #     "data/output/search_results/",
+        #     "data/datasets/UnansweredQuestions/dataset_docs_public.json",
+        #     chunks,
+        #     k=10)
+        # retrieval.write_search_results()
+        answer_generator = AnswerGenerator("data/output/search_results/dataset_code_public.json",
+                                           "data/output/search_results_and_answer/")
+        answer_generator.write_answers()
+        answer_generator = AnswerGenerator("data/output/search_results/dataset_docs_public.json",
+                                           "data/output/search_results_and_answer/")
+        answer_generator.write_answers()
         evaluation = Evaluation("data/output/search_results/dataset_docs_public.json",
                                 "data/datasets/AnsweredQuestions/dataset_docs_public.json")
         evaluation.print_report()
