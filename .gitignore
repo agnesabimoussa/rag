@@ -10,3 +10,4 @@ inputs/
 *.egg-info/
 models/qwen3-0.6b
 models/all-minilm-l6-v2
+data/processed/chroma_db
