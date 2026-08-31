@@ -1,7 +1,7 @@
 from typing import List, Dict
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from src.llm.model_download import ModelDownload
+from src.models.model_download import ModelDownload
 
 
 class LLM:

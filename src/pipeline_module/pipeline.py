@@ -1,7 +1,7 @@
 from pathlib import Path
 import uuid
 from src.chunking_modules.chunks_generator import Chunking
-from src.indexing_module.indexing import Indexing
+from src.indexing_module.lexical_index import LexicalIndexing
 from src.retrieval_modules.retrieval import Retrieval
 from src.answer_generation_modules.answer_generator import AnswerGenerator
 from src.data_models.search_result import MinimalSearchResults
@@ -16,10 +16,9 @@ class Pipeline:
         chunking = Chunking("data/raw", "data/processed/", 2000)
         chunks = chunking.apply_chunking()
         # 2 - indexing: save bm25 index to data/processed/bm25_index.pkl
-        indexing = Indexing(chunks)
+        indexing = LexicalIndexing(chunks)
         bm25 = indexing.create_index()
         # Bonus: create chromadb index
-        
         # 3 - retrieval - retrieve relevant documents for all questions in
         # datasets_public/public/
         # save dir, questions file

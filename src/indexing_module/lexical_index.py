@@ -5,7 +5,7 @@ from src.text_processing import tokenize_text
 from typing import List
 import pickle
 from rank_bm25 import BM25Okapi
-import tqdm
+from tqdm import tqdm
 
 
 class LexicalIndexing(Indexing):
