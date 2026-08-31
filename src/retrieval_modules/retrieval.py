@@ -3,8 +3,9 @@ from src.data_models.minimal_source import MinimalSource
 from src.error_handling_modules.inavlid_json import InvalidJSON
 from src.data_models.search_result import (StudentSearchResults,
                                            MinimalSearchResults)
-from src.chunking_modules.chunk import Chunk
+from src.chunking_modules.chunk import Chunk, CodeChunk, MarkdownChunk
 from src.text_processing import tokenize_text
+from src.file_operations.file_operations import FileOperations
 from rank_bm25 import BM25Okapi
 from pathlib import Path
 import heapq
@@ -18,10 +19,10 @@ from tqdm import tqdm
 class Retrieval:
     def __init__(self,
                  bm25: BM25Okapi,
-                 save_directory: str,
-                 dataset_path: str,
                  chunks: List[Chunk],
-                 k: int = 5) -> None:
+                 k: int = 5,
+                 dataset_path: str = "data/datasets/UnansweredQuestions/",
+                 save_directory: str = "data/output/search_results/") -> None:
         self.bm25 = bm25
         self.save_directory = Path(save_directory)
         self.dataset_path = Path(dataset_path)
@@ -48,23 +49,15 @@ class Retrieval:
             raise FileNotFoundError(
                 f"No index found under {index_dir}. Run the `index` command first."
             )
-        # Order must match Chunking.apply_chunking(), which returns
-        # markdown_chunks + code_chunks and is what the persisted BM25 index
-        # (data/processed/bm25_index.pkl) was built from — get_scores()
-        # returns positions in that fit order, so loading chunks back in a
-        # different order here would silently pair scores with the wrong
-        # chunk.
-        chunks = []
+        chunks: List[Chunk] = []
         with md_chunk_file.open("r", encoding="utf-8") as file:
-            chunks.extend(TypeAdapter(List[Chunk]).validate_python(json.load(file)))
+            chunks.extend(TypeAdapter(List[MarkdownChunk]).validate_python(json.load(file)))
         with py_chunk_file.open("r", encoding="utf-8") as file:
-            chunks.extend(TypeAdapter(List[Chunk]).validate_python(json.load(file)))
+            chunks.extend(TypeAdapter(List[CodeChunk]).validate_python(json.load(file)))
         with bm25_file.open("rb") as file:
             bm25 = pickle.load(file)
         return cls(bm25, save_directory, dataset_path, chunks, k)
 
-    # Find the best matching chunk, then use the remaining context slots to retrieve chunks
-    # from the same original source so the LLM gets more surrounding context.
     def retrieve_context(self, prompt: str) -> List[MinimalSource]:
         tokenized_query = tokenize_text(prompt)
         if not tokenized_query:
@@ -123,25 +116,27 @@ class Retrieval:
             MinimalSource(
                 file_path=chunk.source,
                 first_character_index=chunk.first_character_index,
-                last_character_index=chunk.last_character_index
+                last_character_index=chunk.last_character_index,
+                scope=getattr(chunk, "type", None)
             )
             for chunk in unique_chunks
         ]
 
-    def _load_dataset(self) -> List[UnansweredQuestion]:
+    def _load_dataset(self, file: Path) -> List[UnansweredQuestion]:
         try:
-            with open(self.dataset_path, "r", encoding="utf-8") as file:
-                content = json.load(file)
+            with open(file, "r", encoding="utf-8") as opened:
+                content = json.load(opened)
             adapter = TypeAdapter(List[UnansweredQuestion])
             return adapter.validate_python(content["rag_questions"])
         except (ValidationError, json.JSONDecodeError, KeyError, TypeError):
             raise InvalidJSON("InvalidJSON exception occured. Make sure"
-                              f"{self.dataset_path} contains valid JSON.")
+                              f"{file} contains valid JSON.")
 
-    def search_dataset(self) -> StudentSearchResults:
+    def search_dataset(self, file: Optional[Path] = None) -> StudentSearchResults:
+        file = file or self.dataset_path
         search_results = StudentSearchResults(search_results=[], k=self.k)
-        unanswered_questions = self._load_dataset()
-        for question in tqdm(unanswered_questions, desc="Searching dataset"):
+        unanswered_questions = self._load_dataset(file)
+        for question in tqdm(unanswered_questions, desc=f"Searching {file.name}"):
             sources = self.retrieve_context(question.question)
             search_result = MinimalSearchResults(question=question.question,
                                                  question_id=question.question_id,
@@ -150,11 +145,12 @@ class Retrieval:
         return search_results
 
     def write_search_results(self) -> None:
-        search_results = self.search_dataset()
-        path = self.save_directory
-        path.mkdir(parents=True, exist_ok=True)
-        full_path = path / self.dataset_path.name
-        with open(full_path, "w", encoding="utf-8") as file:
-            json.dump(search_results.model_dump(),
-                      file,
-                      indent=4)
+        files = FileOperations.resolve_files(self.dataset_path, ".json")
+        self.save_directory.mkdir(parents=True, exist_ok=True)
+        for file in files:
+            search_results = self.search_dataset(file)
+            full_path = self.save_directory / file.name
+            with open(full_path, "w", encoding="utf-8") as opened:
+                json.dump(search_results.model_dump(),
+                          opened,
+                          indent=4)

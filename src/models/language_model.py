@@ -14,7 +14,7 @@ class LLM:
             device_map="auto",
         )
         if not system_prompt:
-            system_prompt = """You are a grounded question-answering assistant. Answer the user's question using
+            system_prompt = """You are a grounded question-answering system. Answer the user's question using
             only the information provided in the retrieved sources.
             - Do not use outside knowledge or make assumptions.
             - If the sources do not contain enough information to answer, say: "The provided sources do
@@ -31,22 +31,19 @@ class LLM:
         user_message = {"role": "user", "content": message}
         messages.append(user_message)
 
-    def add_assistant_message(self,
-                              messages: List[Dict[str, str]],
-                              message: str) -> None:
-        assistant_message = {"role": "system", "content": message}
-        messages.append(assistant_message)
+    def add_system_message(self,
+                           messages: List[Dict[str, str]],
+                           message: str) -> None:
+        system_message = {"role": "system", "content": message}
+        messages.insert(0, system_message)
 
     def chat(self,
              messages: List[Dict[str, str]],
              enable_thinking: bool = False,
-             max_new_tokens: float = 1000,
-             do_sample: bool = True,
-             temperature: float = 0.7,
-             top_p: float = 0.8,
-             top_k: float = 20,
-             repetition_penalty: float = 1.05) -> str:
-        self.add_assistant_message(messages, self.system_prompt)
+             max_new_tokens: float = 100,
+             do_sample: bool = False,
+             repetition_penalty: float = 1.5) -> str:
+        self.add_system_message(messages, self.system_prompt)
         inputs = self.tokenizer.apply_chat_template(
             messages,
             tokenize=True,
@@ -60,9 +57,6 @@ class LLM:
                 **inputs,
                 max_new_tokens=max_new_tokens,
                 do_sample=do_sample,
-                temperature=temperature,
-                top_p=top_p,
-                top_k=top_k,
                 repetition_penalty=repetition_penalty,
             )
         answer: str = self.tokenizer.decode(

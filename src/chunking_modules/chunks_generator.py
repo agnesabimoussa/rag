@@ -80,7 +80,8 @@ class Chunking:
     using a distinct chunking strategy per file type.
     """
 
-    def __init__(self, corpus_path: str, output_dir: str,
+    def __init__(self, corpus_path: str = "data/raw/",
+                 output_dir: str = "data/processed/",
                  max_chunk_size: int = 2000) -> None:
         """Initialize the chunker.
 

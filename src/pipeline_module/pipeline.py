@@ -14,7 +14,7 @@ class Pipeline:
     @staticmethod
     def run_pipeline() -> None:
         # 1 - chunking: write to data/processed/
-        chunking = Chunking("data/raw", "data/processed/", 2000)
+        chunking = Chunking()
         chunks = chunking.apply_chunking()
         # 2 - indexing: save bm25 index to data/processed/bm25_index.pkl
         lexical_indexing = LexicalIndexing(chunks)
@@ -24,32 +24,12 @@ class Pipeline:
         vector_indexing.create_index()
         # 3 - retrieval - retrieve relevant documents for all questions in
         # datasets_public/public/
-        retrieval = Retrieval(
-            bm25,
-            "data/output/search_results/",
-            "data/datasets/UnansweredQuestions/dataset_code_public.json",
-            chunks,
-            k=10)
-        retrieval.write_search_results()
-        retrieval = Retrieval(
-            bm25,
-            "data/output/search_results/",
-            "data/datasets/UnansweredQuestions/dataset_docs_public.json",
-            chunks,
-            k=10)
+        retrieval = Retrieval(bm25,chunks)
         retrieval.write_search_results()
         # Bonus: semantic retrieval
-        # answer_generator = AnswerGenerator("data/output/search_results/dataset_code_public.json",
-        #                                    "data/output/search_results_and_answer/")
-        # answer_generator.write_answers()
-        # answer_generator = AnswerGenerator("data/output/search_results/dataset_docs_public.json",
-        #                                    "data/output/search_results_and_answer/")
-        # answer_generator.write_answers()
-        evaluation = Evaluation("data/output/search_results/dataset_docs_public.json",
-                                "data/datasets/AnsweredQuestions/dataset_docs_public.json")
-        evaluation.print_report()
-        evaluation = Evaluation("data/output/search_results/dataset_code_public.json",
-                                "data/datasets/AnsweredQuestions/dataset_code_public.json")
+        answer_generator = AnswerGenerator()
+        answer_generator.write_answers()
+        evaluation = Evaluation()
         evaluation.print_report()
         # Bonus: serve app
         Pipeline.serve()
@@ -59,10 +39,10 @@ class Pipeline:
               corpus_path: str = "data/raw",
               output_dir: str = "data/processed") -> None:
         try:
-            chunking = Chunking("data/raw", "data/processed/")
+            chunking = Chunking(corpus_path, output_dir, max_chunk_size)
             chunks = chunking.apply_chunking()
             # 2 - indexing: save bm25 index to data/processed/bm25_index.pkl
-            indexing = LexicalIndexing(chunks, "data/processed/bm25_index.pkl")
+            indexing = LexicalIndexing(chunks, output_dir)
             indexing.create_index()
             print(f"Ingestion complete! Indexed {len(chunks)} chunks under {output_dir}/")
         except FileNotFoundError as error:
@@ -131,7 +111,7 @@ class Pipeline:
     @staticmethod
     def evaluate(student_search_results_path: str, dataset_path: str) -> None:
         try:
-            print(Evaluation(student_search_results_path, dataset_path).report())
+            Evaluation(student_search_results_path, dataset_path).print_report()
         except (FileNotFoundError, InvalidJSON) as error:
             print(error)
 
