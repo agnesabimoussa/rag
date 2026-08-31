@@ -9,3 +9,4 @@ inputs/
 .pytest_cache/
 *.egg-info/
 models/qwen3-0.6b
+models/all-minilm-l6-v2
