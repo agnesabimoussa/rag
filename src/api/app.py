@@ -6,7 +6,7 @@ classes as the CLI — no duplicated logic.
 import uuid
 from typing import List
 from fastapi import FastAPI, HTTPException
-from src.answer_generation_modules.answer_generator import AnswerGenerator
+from src.answer_generation.answer_generator import AnswerGenerator
 from src.data_models.minimal_source import MinimalSource
 from src.data_models.search_answer import MinimalAnswer
 from src.data_models.search_result import MinimalSearchResults

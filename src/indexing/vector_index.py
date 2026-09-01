@@ -1,5 +1,5 @@
 from src.models.embeddings import EmbeddingModel
-from src.indexing_module.indexing import Indexing
+from src.indexing.indexing import Indexing
 from src.data_models.chunk import Chunk
 import chromadb
 from typing import List

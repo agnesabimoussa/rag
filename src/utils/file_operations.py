@@ -2,7 +2,7 @@ from pathlib import Path
 import json
 from typing import List
 from typing import Any
-from src.error_handling_modules.inavlid_json import InvalidJSON
+from src.error_handling.inavlid_json import InvalidJSON
 from pydantic import TypeAdapter, ValidationError
 
 

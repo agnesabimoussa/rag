@@ -3,7 +3,7 @@ from src.data_models.search_result import (StudentSearchResults,
 from src.data_models.search_answer import (StudentSearchResultsAndAnswer,
                                            MinimalAnswer)
 from src.data_models.minimal_source import MinimalSource
-from src.error_handling_modules.inavlid_json import InvalidJSON
+from src.error_handling.inavlid_json import InvalidJSON
 from src.file_operations.file_operations import FileOperations
 from pathlib import Path
 from pydantic import TypeAdapter, ValidationError

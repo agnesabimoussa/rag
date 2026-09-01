@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import List, Tuple
 from src.data_models.search_result import StudentSearchResults, MinimalSearchResults
 from src.data_models.rag_dataset import RagDataset
-from src.error_handling_modules.invalid_test import InvalidTest
+from src.error_handling.invalid_test import InvalidTest
 from src.data_models.answered_question import AnsweredQuestion
 from src.data_models.unanswered_question import UnansweredQuestion
 from src.utils.file_operations import FileOperations

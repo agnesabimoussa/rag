@@ -1,4 +1,4 @@
-from src.indexing_module.indexing import Indexing
+from src.indexing.indexing import Indexing
 from src.data_models.chunk import Chunk
 from src.utils.text_processing import tokenize_text
 from typing import List

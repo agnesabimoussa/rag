@@ -1,13 +1,13 @@
 from pathlib import Path
 import uuid
 from src.chunking.chunks_generator import Chunking
-from src.indexing_module.lexical_index import LexicalIndexing
-from src.indexing_module.vector_index import VectorIndexing
+from src.indexing.lexical_index import LexicalIndexing
+from src.indexing.vector_index import VectorIndexing
 from src.retrieval.retrieval import Retrieval
-from src.answer_generation_modules.answer_generator import AnswerGenerator
+from src.answer_generation.answer_generator import AnswerGenerator
 from src.data_models.search_result import MinimalSearchResults
-from src.error_handling_modules.inavlid_json import InvalidJSON
-from src.evaluation_module.evaluation import Evaluation
+from src.error_handling.inavlid_json import InvalidJSON
+from src.evaluation.evaluation import Evaluation
 
 
 class Pipeline:
