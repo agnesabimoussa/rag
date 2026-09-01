@@ -5,7 +5,7 @@ from src.chunking.chunker import Chunker
 from langchain_text_splitters import MarkdownHeaderTextSplitter
 
 
-class MarkdwonChunker(Chunker):
+class MarkdownChunker(Chunker):
     def __init__(self,
                  max_chunk_size: int) -> None:
         super().__init__(max_chunk_size)
@@ -23,9 +23,9 @@ class MarkdwonChunker(Chunker):
             strip_headers=True,
         )
 
-    def make_chunk(self, text, source, first_char_idx, last_char_idx,
-                   original_chunk_id, section: str) -> MarkdownChunk:
-        return MarkdownChunk(id=self.id_prefix + str(next(self.id_generator)),
+    def make_chunk(self, text: str, source: str, first_char_idx: int, last_char_idx: int,
+                   original_chunk_id: str | None, section: str) -> MarkdownChunk:
+        return MarkdownChunk(id=self.make_chunk_id(self.id_prefix, source, first_char_idx, last_char_idx),
                              text=text,
                              source=source,
                              first_character_index=first_char_idx,

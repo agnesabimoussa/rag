@@ -1,6 +1,6 @@
 from pathlib import Path
 import uuid
-from src.chunking.chunks_generator import Chunking
+from src.chunking.chunks_generator import ChunksGenerator
 from src.indexing.lexical_index import LexicalIndexing
 from src.indexing.vector_index import VectorIndexing
 from src.retrieval.retrieval import Retrieval
@@ -13,41 +13,48 @@ from src.evaluation.evaluation import Evaluation
 class Pipeline:
     @staticmethod
     def run_pipeline() -> None:
-        # 1 - chunking: write to data/processed/
-        chunking = Chunking()
+        # 1 - chunking: write to data/processed/, re-chunking only new/changed files
+        chunking = ChunksGenerator()
         chunks = chunking.apply_chunking()
         # 2 - indexing: save bm25 index to data/processed/bm25_index.pkl
+        # (rebuilt only if something changed; otherwise loaded from disk)
         lexical_indexing = LexicalIndexing(chunks)
-        bm25 = lexical_indexing.create_index()
-        # Bonus: create chromadb index
-        vector_indexing = VectorIndexing(chunks)
+        bm25 = lexical_indexing.create_index(force=chunking.has_changes)
+        # Bonus: create chromadb index, upserting/deleting only the delta
+        vector_indexing = VectorIndexing(chunking.chunks_to_embed,
+                                         removed_ids=chunking.removed_chunk_ids)
         collection = vector_indexing.create_index()
         # 3 - retrieval - retrieve relevant documents for all questions in
         # datasets_public/public/
-        # retrieval = Retrieval(chunks)
-        
-        # retrieval.write_search_results()
-        # # Bonus: semantic retrieval
-        # answer_generator = AnswerGenerator()
-        # answer_generator.write_answers()
-        # evaluation = Evaluation()
-        # evaluation.print_report()
-        # # Bonus: serve app
-        # Pipeline.serve()
+        retrieval = Retrieval(chunks, bm25, collection)
+
+        retrieval.write_search_results()
+        # Bonus: semantic retrieval
+        answer_generator = AnswerGenerator()
+        answer_generator.write_answers()
+        evaluation = Evaluation()
+        evaluation.print_report()
+        # Bonus: serve app
+        Pipeline.serve()
 
     @staticmethod
     def index(max_chunk_size: int = 2000,
               corpus_path: str = "data/raw",
               output_dir: str = "data/processed") -> None:
         try:
-            chunking = Chunking(corpus_path, output_dir, max_chunk_size)
+            chunking = ChunksGenerator(corpus_path, output_dir, max_chunk_size)
             chunks = chunking.apply_chunking()
             # 2 - indexing: save bm25 index to data/processed/bm25_index.pkl
             lexical_indexing = LexicalIndexing(chunks, output_dir)
-            lexical_indexing.create_index()
-            vector_indexing = VectorIndexing(chunks, output_dir)
+            lexical_indexing.create_index(force=chunking.has_changes)
+            vector_indexing = VectorIndexing(chunking.chunks_to_embed, output_dir,
+                                             removed_ids=chunking.removed_chunk_ids)
             vector_indexing.create_index()
-            print(f"Ingestion complete! Indexed {len(chunks)} chunks under {output_dir}/")
+            if chunking.has_changes:
+                print(f"Ingestion complete! Indexed {len(chunking.chunks_to_embed)} new/changed "
+                      f"chunk(s) ({len(chunks)} total) under {output_dir}/")
+            else:
+                print(f"No changes detected. Using cached index ({len(chunks)} chunks) under {output_dir}/")
         except FileNotFoundError as error:
             print(error)
 

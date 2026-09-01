@@ -9,6 +9,7 @@ from tqdm import tqdm
 from src.models.llm import LLM
 from src.utils.file_operations import FileOperations
 
+
 class AnswerGenerator:
     def __init__(self,
                  student_search_results_path: str = "data/output/search_results/",
@@ -16,12 +17,12 @@ class AnswerGenerator:
         self.student_search_results_path = Path(student_search_results_path)
         self.save_dir = Path(save_dir)
         self.model = LLM()
-        self.cache: Dict = {}
+        self.cache: Dict[str, str] = {}
 
     def _get_retrieved_context(self, sources: List[MinimalSource]) -> str:
         context = []
         for source in sources:
-            content = FileOperations.read_file(source.file_path)
+            content = FileOperations.read_file(Path(source.file_path))
             retrieved_text = content[
                 source.first_character_index:source.last_character_index
             ]
@@ -32,13 +33,18 @@ class AnswerGenerator:
         return "\n\n".join(context)
 
     def answer_prompt(self, question: MinimalSearchResults) -> str:
-        messages = []
+        # cache hit
+        if question.question_id in self.cache:
+            return self.cache[question.question_id]
+        # else if cache miss
+        messages: List[Dict[str, str]] = []
         context = self._get_retrieved_context(
             question.retrieved_sources
         )
         self.model.add_user_message(messages, context)
         self.model.add_user_message(messages, question.question)
         response = self.model.chat(messages)
+        self.cache[question.question_id] = response
         return response
 
     def answer_dataset(self, search_results: StudentSearchResults) -> StudentSearchResultsAndAnswer:

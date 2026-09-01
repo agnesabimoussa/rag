@@ -1,5 +1,5 @@
-import itertools
-from typing import List
+import hashlib
+from typing import Any, List, Sequence
 from pathlib import Path
 from abc import ABC, abstractmethod
 from src.data_models.chunk import Chunk
@@ -8,8 +8,20 @@ from src.utils.file_operations import FileOperations
 
 class Chunker(ABC):
     def __init__(self, max_chunk_size: int) -> None:
-        self.id_generator = itertools.count(start=1)
         self.max_chunk_size = max_chunk_size
+
+    @staticmethod
+    def make_chunk_id(prefix: str, source: str, first_char_idx: int, last_char_idx: int) -> str:
+        """Deterministic ID from a chunk's source span.
+
+        Re-chunking an unchanged file must reproduce the same IDs so the
+        vector/lexical indexes can be diffed and updated incrementally
+        instead of rebuilt from scratch.
+        """
+        digest = hashlib.sha1(
+            f"{source}:{first_char_idx}:{last_char_idx}".encode("utf-8")
+        ).hexdigest()
+        return f"{prefix}{digest[:16]}"
 
     @staticmethod
     def find_span(text: str, target: str, cursor: int = 0) -> tuple[int, int]:
@@ -51,7 +63,7 @@ class Chunker(ABC):
 
     def chunk_files(self,
                     files: List[Path]) -> List[Chunk]:
-        chunks = []
+        chunks: List[Chunk] = []
         for file in files:
             content = FileOperations.read_file(file)
             if content.strip():
@@ -62,13 +74,13 @@ class Chunker(ABC):
     @abstractmethod
     def chunk_file(self,
                    file_name: Path,
-                   content: str) -> List[Chunk]:
+                   content: str) -> Sequence[Chunk]:
         pass
 
     @abstractmethod
     def make_chunk(self, text: str, source: str, first_char_idx: int,
                    last_char_idx: int, original_chunk_id: str | None,
-                   *args, **kwargs) -> Chunk:
+                   *args: Any, **kwargs: Any) -> Chunk:
         pass
 
     def enforce_char_limit(self, text: str) -> List[str]:
@@ -76,7 +88,9 @@ class Chunker(ABC):
         if len(text) <= self.max_chunk_size:
             return [text]
         lines = text.splitlines(keepends=True)
-        sub_chunks, current, current_len = [], [], 0
+        sub_chunks: List[str] = []
+        current: List[str] = []
+        current_len = 0
         for line in lines:
             line_len = len(line)
             if current_len + line_len > self.max_chunk_size and current:

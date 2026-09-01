@@ -81,7 +81,13 @@ class Evaluation:
                     )
 
                 student_sources = search_results[i].retrieved_sources[:k]
-                ground_truth_sources = search_answers[i].sources
+                ground_truth_answer = search_answers[i]
+                if not isinstance(ground_truth_answer, AnsweredQuestion):
+                    raise InvalidTest(
+                        f"InvalidTest: ground truth question {ground_truth_answer.question_id} in {name} "
+                        "has no annotated sources to evaluate against."
+                    )
+                ground_truth_sources = ground_truth_answer.sources
 
                 if not ground_truth_sources:
                     continue

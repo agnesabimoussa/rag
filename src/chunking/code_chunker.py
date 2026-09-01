@@ -25,8 +25,8 @@ class CodeChunker(Chunker):
         return offsets
 
     @staticmethod
-    def _node_span(node: ast.AST, line_offsets: List[int]) -> tuple[int, int]:
-        if not hasattr(node, "lineno") or not hasattr(node, "end_lineno"):
+    def _node_span(node: ast.stmt, line_offsets: List[int]) -> tuple[int, int]:
+        if node.end_lineno is None or node.end_col_offset is None:
             raise ValueError("AST node does not expose source offsets.")
         start = line_offsets[node.lineno - 1] + node.col_offset
         end = line_offsets[node.end_lineno - 1] + node.end_col_offset
@@ -66,7 +66,7 @@ class CodeChunker(Chunker):
     def make_chunk(self, text: str, source: str, first_char_idx: int, last_char_idx: int,
                    original_chunk_id: str | None, type: str | None, parent_id: str | None,
                    child_ids: List[str] | None) -> CodeChunk:
-        return CodeChunk(id=self.id_prefix + str(next(self.id_generator)),
+        return CodeChunk(id=self.make_chunk_id(self.id_prefix, source, first_char_idx, last_char_idx),
                          text=text,
                          source=source,
                          first_character_index=first_char_idx,

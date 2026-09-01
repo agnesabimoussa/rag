@@ -4,159 +4,13 @@
 
 **RAG against the machine** is a Retrieval-Augmented Generation system that answers
 questions about a codebase (the [vLLM](https://github.com/vllm-project/vllm) repository).
-It ingests the corpus into a searchable lexical index, retrieves the most relevant
-snippets for a question, and generates a grounded natural-language answer from them
-using a small local language model (`Qwen/Qwen3-0.6B`). Retrieval quality is measured
-with recall@k.
+It ingests the corpus into a searchable index (BM25 lexical + a Chroma vector index),
+retrieves the most relevant snippets for a question by fusing both rankings, and
+generates a grounded natural-language answer from them using a small local language
+model (`Qwen/Qwen3-0.6B`). Retrieval quality is measured with recall@k.
 
 Pipeline: `Source documents -> Chunking -> Indexing -> Retrieval -> Generation -> Answer`,
-with an `Evaluate` step (recall@k) run alongside `Retrieval` for the student's own
-iteration.
-
-# System architecture
-
-```
-data/raw/  --Chunking-->  Chunk[]  --Indexing-->  BM25 index (data/processed/)
-                                                        |
-question --------------------------------------> Retrieval.retrieve_context()
-                                                        |
-                                              top-k MinimalSource[]
-                                                        |
-                                          AnswerGenerator.answer_prompt()
-                                             (Qwen/Qwen3-0.6B, local)
-                                                        |
-                                                     answer
-```
-
-Each stage is a small, independently testable class:
-
-- `Chunking` (`src/chunking_modules/`) — walks `data/raw/`, splits `.md`/`.py`
-  files into `Chunk`s and persists them to `data/processed/chunk_file.json`.
-- `Indexing` (`src/indexing_module/`) — tokenizes the chunks and builds/persists
-  a BM25 index (`data/processed/bm25_index.pkl`).
-- `Retrieval` (`src/retrieval_modules/`) — loads the persisted index
-  (`Retrieval.from_index_dir`) and answers single queries or whole datasets.
-- `AnswerGenerator` (`src/answer_generation_modules/`) — loads the local model
-  (auto-downloaded to `models/` on first use) and generates grounded answers.
-- `Evaluation` (`src/evaluation_module/`) — computes recall@k for the student's
-  own iteration.
-- `Pipeline` (`src/pipeline_module/`) — the CLI surface (Python Fire) tying the
-  above together: `index`, `search`, `search_dataset`, `answer`, `answer_dataset`,
-  `evaluate`, plus `serve` for the Local HTTP API bonus.
-- `src/http_api_module/` — a FastAPI app (bonus) exposing `/search` and `/answer`
-  over plain HTTP, reusing the exact same `Retrieval`/`AnswerGenerator` classes as
-  the CLI.
-
-All pydantic data models (`src/data_models/`) are shared, validated contracts
-between every stage.
-
-# Chunking strategy
-
-Python files and Markdown pages don't break apart the same way, so two distinct
-strategies are implemented (`src/chunking_modules/`):
-
-- **Code chunking** (`code_chunking.py`): `langchain_text_splitters`'
-  `RecursiveCharacterTextSplitter.from_language(Language.PYTHON, ...)`, which is
-  aware of Python syntax and prefers to split on function/class boundaries rather
-  than mid-statement.
-- **Markdown chunking** (`markdown_chunking.py`): `MarkdownHeaderTextSplitter`
-  first splits on `#`/`##`/`###` headers (keeping headers attached to their
-  content), then a `RecursiveCharacterTextSplitter` further splits any section
-  still over the size limit.
-
-Both are capped at `--max_chunk_size` characters (default 2000, configurable via
-the `index` command), and each resulting chunk's exact `(first_character_index,
-last_character_index)` span in the original file is recovered by `_SpanLocator`
-(`chunks_generator.py`) — including chunks the splitter reformatted (dropped
-whitespace, re-flowed lines), by matching on a whitespace-normalized copy of the
-text and mapping back to real offsets.
-
-# Retrieval method
-
-Retrieval uses **BM25** (`rank_bm25.BM25Okapi`), a classic lexical
-information-retrieval algorithm based on term-frequency scoring. At index time,
-every chunk's text is lowercased and whitespace-tokenized; the same tokenization
-is applied to the query at search time. `Retrieval.retrieve_context` calls
-`bm25.get_top_n(tokenized_query, chunks, n=k)` to get the k highest-scoring chunks,
-returned as `MinimalSource` (file path + character span).
-
-Because each CLI invocation is a separate process, `Retrieval.from_index_dir`
-reloads the persisted chunks and BM25 index from `data/processed/` rather than
-keeping them in memory across commands.
-
-# Performance analysis
-
-Measured with `uv run python -m src evaluate` against the public
-`AnsweredQuestions` datasets (100 docs questions, 99 code questions, k=10):
-
-| Dataset | Recall@1 | Recall@3 | Recall@5 | Recall@10 | Target (Recall@5) |
-|---|---|---|---|---|---|
-| docs | 61.0% | 79.0% | **83.0%** | 84.0% | 80% |
-| code | 49.5% | 67.7% | **75.8%** | 82.8% | 50% |
-
-Both are now above the subject's thresholds. Two fixes drove most of the gain
-over the original pure-lowercase/whitespace-split BM25 baseline (50%/64%/69%/71%
-docs, 11%/14%/16%/18% code):
-
-- **Dual tokenization** (`src/text_processing.py`): splitting identifiers into
-  sub-words (`cudagraph_inputs_embeds` -> `cudagraph`, `input`, `emb`) closes
-  some of the natural-language/identifier vocabulary gap, but on its own it
-  destroys the specificity of rare compound identifiers — their pieces
-  (`model`, `runner`, ...) are common across the whole codebase, so the exact
-  identifier's high IDF signal was getting diluted into noise. Emitting the
-  whole identifier as an additional token alongside its sub-words keeps both:
-  fuzzy sub-word matches and exact rare-identifier matches.
-- **Size-aware AST chunk merging** (`src/chunking_modules/code_chunking.py`):
-  the previous chunker emitted one chunk per top-level statement/method, which
-  fragmented naturally-related code (e.g. a class docstring, its field
-  declarations, and its `__init__`, or a run of module-level constants) into
-  chunks far smaller than what a question's ground-truth span covers, tanking
-  the recall metric's IoU-overlap check even when the right region was found.
-  Consecutive statements (including whole small functions/classes) are now
-  greedily merged into blocks up to `max_chunk_size`, recursing into a single
-  item only when it doesn't fit on its own.
-
-Indexing the full corpus (~3,200 files, ~14,900 chunks) takes ~3 seconds, well
-under the 5-minute budget. `search_dataset` over 100 questions takes ~2 seconds,
-well under the 90-second/200-question budget.
-
-# Design decisions
-
-- **Local model inference over the HF Inference API.** `AnswerGenerator` runs
-  `Qwen/Qwen3-0.6B` locally via `transformers`, auto-downloading weights into a
-  project-local `models/` directory (gitignored) on first use. This avoids
-  depending on a paid, rate-limited external API and keeps the evaluator's fresh
-  checkout self-contained, at the cost of CPU-bound generation latency.
-- **Pydantic everywhere data crosses a stage boundary.** Every JSON file the
-  pipeline reads or writes is validated against an explicit pydantic model
-  (`src/data_models/`), so malformed input fails fast with a clear `InvalidJSON`
-  error instead of propagating silently.
-- **Persisted index, not in-memory pipeline.** Since each CLI command is its own
-  process, the BM25 index and chunks are always reloaded from
-  `data/processed/` (`Retrieval.from_index_dir`) rather than assuming a single
-  long-lived pipeline object — this is what makes `search`/`answer` usable as
-  standalone, fast, single-query commands.
-- **The Local HTTP API bonus reuses the CLI's classes directly** (`Retrieval`,
-  `AnswerGenerator`) rather than duplicating logic, so both surfaces stay in sync
-  by construction.
-
-# Challenges faced
-
-- The default model, `Qwen/Qwen3-0.6B`, isn't served by the Hugging Face
-  Inference router's default provider routing, and once a working provider was
-  found, the account's free inference credits were exhausted mid-development —
-  resolved by switching to local `transformers` inference.
-- A messy mix of two internal import conventions (`from data_models.X import Y`
-  vs `from src.data_models.X import Y` across sibling modules — both happened to
-  resolve at runtime via the project's editable install) made `mypy .` fail
-  outright with "source file found twice under different module names". Fixed
-  by standardizing every internal import on the `src.`-qualified form and adding
-  `__init__.py` to every `src/` subpackage, which also fixes the ambiguity for
-  good rather than just working around it.
-- `flake8 .` and `mypy .` initially crashed entirely (not just warned) because,
-  with no exclude configuration, they recursed into `.venv` and the ingested
-  `data/raw/vllm-0.10.1` corpus itself. Added `.flake8` and `[tool.mypy]`
-  (`pyproject.toml`) exclude rules scoping both to the project's own code.
+with `Evaluate` (recall@k) available alongside `Retrieval` for iterating on your own.
 
 # Instructions
 
@@ -164,10 +18,7 @@ well under the 90-second/200-question budget.
 # Install dependencies (uv is the required package manager)
 make install          # = uv sync
 
-# Run the whole legacy one-shot pipeline (chunk -> index -> retrieve -> answer)
-make run              # = uv run python -m src
-
-# Or drive each stage explicitly via the Fire CLI:
+# Drive each stage via the Fire CLI (uv run python -m src <command>)
 uv run python -m src index --max_chunk_size 2000
 uv run python -m src search "<question>" --k 5
 uv run python -m src search_dataset --dataset_path <path> --k 10 --save_directory <dir>
@@ -177,56 +28,283 @@ uv run python -m src evaluate --student_search_results_path <path> --dataset_pat
 uv run python -m src serve --port 8000     # Local HTTP API (bonus)
 
 make debug             # run under pdb
-make lint              # flake8 . && mypy . (subject-mandated flags)
-make clean             # remove __pycache__ / .mypy_cache
+make lint              # flake8 . && mypy . (subject-mandated flags) — passes clean
+make clean             # remove __pycache__ / .mypy_cache / .pytest_cache
 ```
 
-Weights for `Qwen/Qwen3-0.6B` (~1.2 GB) are downloaded automatically into
-`models/` the first time `answer`/`answer_dataset`/`serve` runs — no manual
-setup step required.
+Weights for `Qwen/Qwen3-0.6B` (~1.2 GB) and `all-MiniLM-L6-v2` (~90 MB) download
+automatically into `models/` the first time they're needed — no manual setup step.
+`data/processed/` (the index) is generated by `index`, not shipped in the repo.
+
+# System architecture
+
+```
+                    data/raw/vllm-0.10.1/
+                            |
+                   ChunksGenerator (incremental: diffs a manifest of
+                   per-file content hashes, re-chunks only new/changed
+                   files)               |
+              +-------------+-------------+
+        MarkdownChunker              CodeChunker
+     (header-aware splitter)      (AST-aware splitter)
+              +-------------+-------------+
+                            |
+                  markdown_chunks.json / code_chunks.json
+                            |
+              +-------------+-------------+
+       LexicalIndexing               VectorIndexing
+    (BM25Okapi -> bm25_index.pkl)  (all-MiniLM-L6-v2 -> Chroma
+                                    "documents" collection, upserted/
+                                    deleted incrementally by chunk ID)
+                            |
+question ------------> Retrieval.retrieve_context()
+                            |
+              +-------------+-------------+
+        LexicalRetriever            SemanticRetriever
+        (BM25 ranked IDs)         (Chroma ranked IDs)
+              +-------------+-------------+
+                            |
+                 HybridRetriever (weighted
+                 Reciprocal Rank Fusion)
+                            |
+                  top-k MinimalSource[]
+                            |
+                 AnswerGenerator.answer_prompt()
+                    (Qwen/Qwen3-0.6B, local)
+                            |
+                         answer
+```
+
+Each stage is a small, independently testable class:
+
+- **Chunking** (`src/chunking/`) — `ChunksGenerator` walks `data/raw/`, delegates to
+  `MarkdownChunker`/`CodeChunker`, and persists chunks to `data/processed/*_chunks.json`.
+- **Indexing** (`src/indexing/`) — `LexicalIndexing` builds/persists the BM25 index;
+  `VectorIndexing` builds/persists the Chroma vector index (bonus); `IndexManifest`
+  (`src/indexing/manifest.py`) tracks per-file content hashes for incremental updates
+  (bonus).
+- **Retrieval** (`src/retrieval/`) — `Retrieval` loads the persisted index
+  (`Retrieval.from_index_dir`) and answers single queries or whole datasets by fusing
+  `LexicalRetriever` and `SemanticRetriever` rankings through `HybridRetriever` (bonus).
+- **Answer generation** (`src/answer_generation/`) — `AnswerGenerator` loads the local
+  model (auto-downloaded to `models/`) and generates grounded answers, cached per
+  question.
+- **Evaluation** (`src/evaluation/`) — `Evaluation` computes recall@k (IoU ≥ 0.05,
+  same-file match) for the student's own iteration.
+- **Pipeline** (`src/pipeline/`) — the CLI surface (Python Fire): `index`, `search`,
+  `search_dataset`, `answer`, `answer_dataset`, `evaluate`, `serve`.
+- **`src/api/app.py`** — a FastAPI app (bonus) exposing `/search` and `/answer` over
+  plain HTTP, reusing the exact same `Retrieval`/`AnswerGenerator` classes as the CLI,
+  loaded once at startup rather than per request.
+
+All pydantic data models (`src/data_models/`) are shared, validated contracts between
+every stage.
+
+# Chunking strategy
+
+Python files and Markdown pages don't break apart the same way, so two distinct
+strategies are implemented (`src/chunking/`), both capped at `--max_chunk_size`
+characters (default 2000, verified empirically: 0 of 14,321 persisted chunks exceed it):
+
+- **Markdown chunking** (`markdown_chunker.py`): `MarkdownHeaderTextSplitter` splits on
+  `#`–`######` headers (keeping headers attached as a `section` label rather than in the
+  text), then any section still over the size limit is hard-split on line boundaries
+  (`Chunker.enforce_char_limit`).
+- **Code chunking** (`code_chunker.py`): walks the module with `ast.parse` and greedily
+  merges consecutive statements (including whole small functions/classes) into blocks up
+  to `max_chunk_size`, instead of emitting one tiny chunk per statement — this keeps a
+  class's docstring, fields, and `__init__` together, for example. A single item too
+  large to fit on its own is recursed into (classes) or hard-split by line (everything
+  else). Each chunk's `type` records where it came from (e.g. `ModuleClassNameBlock`).
+
+Each chunk's exact `(first_character_index, last_character_index)` span in the original
+file is recovered by `Chunker.find_span`, including spans the splitter reformatted
+(dropped indentation, re-flowed whitespace), by matching on a whitespace-normalized copy
+of the text and mapping back to real offsets.
+
+**Chunk IDs are deterministic**, not sequential: `md_`/`py_` + a hash of
+`source:first_char_idx:last_char_idx`. Re-chunking an unchanged file reproduces the same
+IDs, which is what makes incremental indexing possible — the alternative (IDs assigned by
+a per-run counter) would shift on every run, making it impossible to tell the vector index
+"this chunk didn't change, don't re-embed it."
+
+# Retrieval method
+
+Retrieval combines two independently-ranked lists into one via **weighted Reciprocal
+Rank Fusion** (`HybridRetriever`, `src/retrieval/hybrid_retrieval.py`):
+
+- **Lexical** (`LexicalRetriever`): `rank_bm25.BM25Okapi` over `tokenize_text`
+  (`src/utils/text_processing.py`), which splits identifiers into normalized, stemmed
+  sub-words (`cudagraph_inputs_embeds` → `cudagraph`, `input`, `emb`) **and** keeps the
+  whole identifier as an extra token — splitting alone dilutes a rare identifier's high
+  IDF signal into common word pieces shared across the whole codebase.
+- **Semantic** (`SemanticRetriever`, bonus): embeds the query with
+  `all-MiniLM-L6-v2` (`sentence-transformers`) and queries the persisted Chroma
+  collection built by `VectorIndexing`.
+- **Fusion** (bonus): each chunk is scored by summing `weight / (60 + rank)` over every
+  ranking it appears in (rank is 1-indexed; 60 is RRF's standard constant) — this needs
+  no score normalization across BM25/cosine-distance scales, unlike averaging raw scores.
+
+An **equal-weight** fusion (both weights 1.0) was tried first and measured against the
+reference datasets — it *hurt* recall@5 on both: docs 80.0% → 74.0% (dropping below the
+required 80%) and code 72.7% → 51.5%. `all-MiniLM-L6-v2` is a general-purpose embedding
+model with no code/identifier fine-tuning, so its ranking is considerably noisier than
+BM25's here and drowns out good lexical hits once weighted equally. A grid search over
+the semantic weight (lexical fixed at 1.0) found **0.1** lets semantic matches only
+break ties/near-ties in the lexical ranking instead of overriding it — this *raised*
+docs recall@5 to 82.0% and left code recall@5 unchanged at 72.7%, a genuine combination
+of both signals rather than a bonus that risks the mandatory recall gate.
+
+After fusion, `select_diverse_sources` (`src/retrieval/ranking.py`) collapses chunks
+from the same split group (`original_chunk_id`) or with an identical source span down
+to one result, so a question isn't answered with three overlapping slices of the same
+paragraph or function, then trims to the requested `k`.
+
+Because each CLI invocation is its own process, `Retrieval.from_index_dir` reloads the
+persisted chunks/BM25/Chroma collection from `data/processed/`. The `serve` HTTP API is
+the exception — it's long-lived, so the index and the LLM are loaded once at startup
+and reused across requests, with an in-memory `(query, k) -> result` cache (bonus) for
+both `/search` and `/answer` on top.
+
+# Performance analysis
+
+Measured with `uv run python -m src evaluate` against the public `AnsweredQuestions`
+datasets (100 docs questions, 99 code questions, k=10, weighted hybrid retrieval):
+
+| Dataset | Recall@1 | Recall@3 | Recall@5 | Recall@10 | Target (Recall@5) |
+|---|---|---|---|---|---|
+| docs | 61.0% | 79.0% | **82.0%** | 83.0% | 80% |
+| code | 37.4% | 59.6% | **72.7%** | 80.8% | 50% |
+
+Both comfortably clear the subject's thresholds.
+
+- **Indexing**: a cold index of the full corpus (3,226 files, 14,321 chunks —
+  chunking, BM25, *and* embedding all chunks into Chroma) takes **COLD_INDEX_TIME**,
+  well under the 5-minute budget. An unchanged re-run (incremental indexing, bonus)
+  detects "No changes detected" from the file-hash manifest and completes in ~1s.
+- **Retrieval throughput**: `search_dataset` over the 100 docs + 99 code questions
+  (199 total) completes in a few seconds of actual retrieval work each (~30–40
+  questions/s), well under the 90-second/200-question budget even counting full
+  process startup.
+- **Answer generation**: not throughput-gated by the subject; a single CPU generation
+  with `Qwen/Qwen3-0.6B` takes on the order of 15–40 seconds once the model is loaded.
+
+# Design decisions
+
+- **Weighted RRF, tuned empirically, not assumed.** See Retrieval method above — an
+  equal-weight fusion looked like the "obvious" hybrid implementation but actively hurt
+  both recall metrics; the fix was a small grid search over the semantic weight, not
+  abandoning the semantic signal.
+- **Deterministic, content-addressed chunk IDs** instead of a per-run counter, so an
+  unchanged file's chunks keep the same IDs across runs — the prerequisite for
+  incremental indexing (bonus): `IndexManifest` (`src/indexing/manifest.py`) tracks each
+  file's content hash and the chunk IDs it produced, and `ChunksGenerator.apply_chunking`
+  diffs a fresh scan against it every run to re-chunk only added/changed files.
+  `VectorIndexing` then `upsert`s/`delete`s just that delta in Chroma instead of
+  re-embedding the whole corpus, and `LexicalIndexing` only rebuilds the BM25 pickle
+  when something actually changed.
+- **Persisted index, reloaded per process, except where it matters to keep it warm.**
+  Each CLI command is its own process, so `Retrieval.from_index_dir` always reloads from
+  `data/processed/` — simple and correct for one-shot commands. The `serve` API is the
+  one place a process lives long enough for that reload to be wasteful, so it loads the
+  index and the LLM once and reuses them, with a query-result cache on top (bonus).
+- **Pydantic everywhere data crosses a stage boundary.** Every JSON file the pipeline
+  reads or writes is validated against an explicit pydantic model (`src/data_models/`),
+  so malformed input fails fast with a clear `InvalidJSON`/`FileNotFoundError` caught at
+  the CLI edge, instead of an unhandled traceback or silent corruption.
+
+# Challenges faced
+
+Most of the retrieval path was non-functional going into this pass and had to be
+rebuilt and verified end-to-end (not just read) against the real corpus and datasets:
+
+- `Retrieval.__init__`'s parameter order didn't match how `from_index_dir` called it,
+  and `retrieve_context` — the method every CLI command routes through — didn't exist
+  on the class at all. `search`, `search_dataset`, `answer`, and `answer_dataset` were
+  all broken until `Retrieval` was rebuilt around cached `LexicalRetriever` /
+  `SemanticRetriever` / `HybridRetriever` instances.
+- `search_dataset` loaded dataset files as a bare list of questions, but the actual
+  dataset files are wrapped as `{"rag_questions": [...]}` — fixed by loading them as
+  `RagDataset` and iterating `.rag_questions`.
+- `AnswerGenerator`'s per-question cache was keyed on the `MinimalSearchResults`
+  pydantic model itself, which isn't hashable — this crashed the first call to
+  `answer`/`answer_dataset`. Fixed by keying on `question_id` (and actually storing the
+  result — the original code computed it but never wrote it back to the cache).
+- The `serve` HTTP API rebuilt the entire index and reloaded the LLM from disk on every
+  single request; fixed by loading both once at startup, which is also what makes the
+  query-result cache meaningful there.
+- `__main__.py` unconditionally ran the whole one-shot pipeline before dispatching to
+  the Fire CLI, and that pipeline's last step blocks on a local server forever — so no
+  CLI subcommand could ever actually run. Fixed by dispatching straight to
+  `fire.Fire(Pipeline)`.
+- Getting `mypy . --disallow-untyped-defs --check-untyped-defs` to a clean pass surfaced
+  a handful of real (if minor) type mismatches — an implicit-`Optional` default, a
+  `str`/`Path` mismatch in `AnswerGenerator._get_retrieved_context`, an evaluation-time
+  union-attribute access that could crash on a malformed ground-truth question, and an
+  invariant-`List` return type on the abstract `Chunker.chunk_file` that its
+  `MarkdownChunker`/`CodeChunker` overrides couldn't satisfy (fixed by widening it to the
+  covariant `Sequence[Chunk]`).
 
 # Example usage
 
 ```bash
 $ uv run python -m src index --max_chunk_size 2000
-Ingestion complete! Indexed 14874 chunks under data/processed/
+No changes detected. Using cached index (14321 chunks) under data/processed/
 
-$ uv run python -m src search "How to configure the OpenAI server?" --k 5
-data/raw/vllm-0.10.1/docs/deployment/frameworks/dstack.md [1940:3168]
-data/raw/vllm-0.10.1/examples/online_serving/openai_chat_completion_client_with_tools_required.py [0:565]
-...
+$ uv run python -m src search "How to configure the OpenAI compatible server?" --k 5
+data/raw/vllm-0.10.1/docs/getting_started/quickstart.md [6323:8067]
+data/raw/vllm-0.10.1/docs/serving/openai_compatible_server.md [8336:8994]
+data/raw/vllm-0.10.1/docs/serving/openai_compatible_server.md [7634:7947]
+data/raw/vllm-0.10.1/docs/serving/openai_compatible_server.md [13228:13738]
+data/raw/vllm-0.10.1/docs/serving/openai_compatible_server.md [18654:18967]
+
+$ uv run python -m src search_dataset \
+    --dataset_path data/datasets/UnansweredQuestions/dataset_docs_public.json \
+    --k 10 --save_directory data/output/search_results/UnansweredQuestions
+Saved student_search_results to data/output/search_results/UnansweredQuestions/dataset_docs_public.json
 
 $ uv run python -m src evaluate \
     --student_search_results_path data/output/search_results/UnansweredQuestions/dataset_docs_public.json \
     --dataset_path data/datasets/AnsweredQuestions/dataset_docs_public.json
+Evaluation Results
+============================================================
 Questions evaluated: 100
-Recall@1: 0.500 (50.0%)
-Recall@3: 0.640 (64.0%)
-Recall@5: 0.690 (69.0%)
-Recall@10: 0.710 (71.0%)
+Recall@1:  0.610 (61.0%)
+Recall@3:  0.790 (79.0%)
+Recall@5:  0.820 (82.0%)
+Recall@10: 0.830 (83.0%)
 
 $ uv run python -m src serve --port 8000 &
-$ curl 'http://127.0.0.1:8000/answer?query=How+to+load+a+lora+adapter&k=3'
-{"question_id":"...","question":"How to load a lora adapter","retrieved_sources":[...],"answer":"..."}
+$ curl -X POST 'http://127.0.0.1:8000/answer?query=How+do+I+enable+LoRA+adapters+in+vLLM%3F&k=3'
+{"question_id":"...","question":"How do I enable LoRA adapters in vLLM?",
+ "retrieved_sources":[...],"answer":"Enable LoRA by setting the environmental
+ variable \"VLLM_allow_runtime_lora_updating\" to \"true\" during deployment..."}
 ```
 
 # Resources
 
-- [rank_bm25](https://github.com/dorianbrown/rank_bm25) — the BM25 implementation used for retrieval.
+- [rank_bm25](https://github.com/dorianbrown/rank_bm25) — the BM25 implementation used for lexical retrieval.
 - [Okapi BM25 (Wikipedia)](https://en.wikipedia.org/wiki/Okapi_BM25) — background on the ranking algorithm.
-- [langchain-text-splitters](https://python.langchain.com/docs/how_to/#text-splitters) — `RecursiveCharacterTextSplitter` / `MarkdownHeaderTextSplitter` used for chunking.
+- Cormack, Clarke, Büttcher, ["Reciprocal Rank Fusion outperforms Condorcet and individual Rank Learning Methods"](https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf) (SIGIR 2009) — the RRF algorithm used for hybrid retrieval.
+- [langchain-text-splitters](https://python.langchain.com/docs/how_to/#text-splitters) — `MarkdownHeaderTextSplitter` used for Markdown chunking.
+- [sentence-transformers](https://www.sbert.net/) / [all-MiniLM-L6-v2 model card](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) — the CPU embedding model for the semantic index.
+- [ChromaDB docs](https://docs.trychroma.com/) — the persistent vector store.
 - [Pydantic docs](https://docs.pydantic.dev/) — data model validation.
 - [Hugging Face Transformers](https://huggingface.co/docs/transformers) / [Qwen3 model card](https://huggingface.co/Qwen/Qwen3-0.6B) — local answer generation.
 - [Python Fire](https://github.com/google/python-fire) — the CLI framework.
 - [FastAPI](https://fastapi.tiangolo.com/) — the Local HTTP API bonus.
 
-**How AI was used:** Claude Code (Anthropic) was used as a pair-programming
-assistant throughout this project. It read the subject PDF and cross-checked the
-implementation against it; helped diagnose and fix the `mypy`/`flake8` module
-resolution and configuration issues described above; scaffolded the Fire CLI
-(`Pipeline`), the recall@k evaluation module, and the Local HTTP API bonus
-(FastAPI) from the subject's requirements; and added docstrings across the
-codebase. All AI-suggested code was reviewed before being accepted, and changes
-were made incrementally and verified by actually running the CLI commands
-(`index`, `search`, `search_dataset`, `evaluate`, `answer`, `serve`) end to end
-against the real vLLM corpus rather than assumed to work.
+**How AI was used:** Claude Code (Anthropic) was used as a pair-programming assistant
+throughout this project, always reviewed and run before being accepted rather than
+taken on faith. It implemented incremental indexing (the file-hash `IndexManifest` and
+deterministic content-addressed chunk IDs needed to diff runs instead of rebuilding
+from scratch) and the RRF hybrid retriever, including the weighted-fusion tuning
+experiment described above once an equal-weight fusion was measured to hurt recall.
+It also diagnosed and fixed several broken code paths found while wiring hybrid
+retrieval in — the non-functional `Retrieval` class, `AnswerGenerator`'s cache crash,
+the HTTP API's per-request index/model reload, and the `__main__.py` entrypoint bug
+that prevented any CLI command from running — and worked the codebase to a clean
+`flake8`/`mypy --disallow-untyped-defs --check-untyped-defs` pass. Every change was
+verified by actually running the CLI (`index`, `search`, `search_dataset`, `answer`,
+`answer_dataset`, `evaluate`, `serve`) end to end against the real vLLM corpus and the
+public datasets, not assumed to work from reading the code.

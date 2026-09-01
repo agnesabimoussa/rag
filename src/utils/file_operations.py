@@ -1,6 +1,7 @@
 from pathlib import Path
 import json
 import pickle
+import hashlib
 from rank_bm25 import BM25Okapi
 from typing import List
 from typing import Any
@@ -34,11 +35,11 @@ class FileOperations:
                               f"{file} contains invalid JSON.")
 
     @staticmethod
-    def write_json(path: Path, content: Any):
+    def write_json(path: Path, content: Any) -> None:
+        data = [item.model_dump() for item in content] if isinstance(content, list) \
+            else content.model_dump()
         with open(path, "w", encoding="utf-8") as opened:
-            json.dump(content.model_dump(),
-                      opened,
-                      indent=4)
+            json.dump(data, opened, indent=4)
 
     @staticmethod
     def read_file(file: Path) -> str:
@@ -56,3 +57,13 @@ class FileOperations:
     def write_bm25(file: Path, bm25: BM25Okapi) -> None:
         with open(file, "wb") as f:
             pickle.dump(bm25, f)
+
+    @staticmethod
+    def get_file_hash(file_path: Path) -> str:
+        hash_sha256 = hashlib.sha256()
+
+        with open(file_path, "rb") as file:
+            while chunk := file.read(8192):
+                hash_sha256.update(chunk)
+
+        return hash_sha256.hexdigest()
