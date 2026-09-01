@@ -1,7 +1,7 @@
 from src.models.model_download import ModelDownload
 from sentence_transformers import SentenceTransformer
 import numpy as np
-from typing import List
+from typing import cast, List
 
 
 class EmbeddingModel:
@@ -12,8 +12,8 @@ class EmbeddingModel:
 
     def embed_text(self, text: str) -> np.ndarray:
         embedding = self.embedding_model.encode(text)
-        return embedding
+        return cast(np.ndarray, embedding)
 
     def embed_chunks(self, chunks: List[str]) -> np.ndarray:
         embeddings = self.embedding_model.encode([chunk for chunk in chunks])
-        return embeddings
+        return cast(np.ndarray, embeddings)

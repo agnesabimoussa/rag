@@ -1,11 +1,11 @@
-from typing import List, Dict
+from typing import List, Dict, Optional
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from src.models.model_download import ModelDownload
 
 
 class LLM:
-    def __init__(self, model_path: str = "Qwen/Qwen3-0.6B", system_prompt: str = None):
+    def __init__(self, model_path: str = "Qwen/Qwen3-0.6B", system_prompt: Optional[str] = None) -> None:
         local_weights_dir = ModelDownload._ensure_local_weights(model_path)
         self.tokenizer = AutoTokenizer.from_pretrained(local_weights_dir)
         self.model = AutoModelForCausalLM.from_pretrained(
