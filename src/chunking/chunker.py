@@ -3,7 +3,7 @@ from typing import List
 from pathlib import Path
 from abc import ABC, abstractmethod
 from src.data_models.chunk import Chunk
-from src.ingestion.file_operations import FileOperations
+from src.utils.file_operations import FileOperations
 
 
 class Chunker(ABC):

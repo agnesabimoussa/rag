@@ -3,15 +3,11 @@ from src.data_models.search_result import (StudentSearchResults,
 from src.data_models.search_answer import (StudentSearchResultsAndAnswer,
                                            MinimalAnswer)
 from src.data_models.minimal_source import MinimalSource
-from src.error_handling.inavlid_json import InvalidJSON
-from src.file_operations.file_operations import FileOperations
 from pathlib import Path
-from pydantic import TypeAdapter, ValidationError
-from typing import List
-import json
+from typing import List, Dict
 from tqdm import tqdm
-from src.models.language_model import LLM
-
+from src.models.llm import LLM
+from src.utils.file_operations import FileOperations
 
 class AnswerGenerator:
     def __init__(self,
@@ -20,22 +16,12 @@ class AnswerGenerator:
         self.student_search_results_path = Path(student_search_results_path)
         self.save_dir = Path(save_dir)
         self.model = LLM()
-
-    def _read_search_results(self, file: Path) -> StudentSearchResults:
-        try:
-            adapter = TypeAdapter(StudentSearchResults)
-            with open(file, "r", encoding="utf-8") as opened:
-                content = json.load(opened)
-            return adapter.validate_python(content)
-        except (ValidationError, json.JSONDecodeError):
-            raise InvalidJSON("InvalidJSON exception occured."
-                              f"{file} contains invalid JSON.")
+        self.cache: Dict = {}
 
     def _get_retrieved_context(self, sources: List[MinimalSource]) -> str:
         context = []
         for source in sources:
-            with open(source.file_path, "r", encoding="utf-8") as file:
-                content = file.read()
+            content = FileOperations.read_file(source.file_path)
             retrieved_text = content[
                 source.first_character_index:source.last_character_index
             ]
@@ -67,10 +53,7 @@ class AnswerGenerator:
         files = FileOperations.resolve_files(self.student_search_results_path, ".json")
         self.save_dir.mkdir(parents=True, exist_ok=True)
         for file in files:
-            search_results = self._read_search_results(file)
+            search_results = FileOperations.load_content(file, StudentSearchResults)
             answers = self.answer_dataset(search_results)
             full_path = self.save_dir / file.name
-            with open(full_path, "w", encoding="utf-8") as opened:
-                json.dump(answers.model_dump(),
-                          opened,
-                          indent=4)
+            FileOperations.write_json(full_path, answers)

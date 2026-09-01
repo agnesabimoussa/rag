@@ -24,16 +24,16 @@ class Pipeline:
         collection = vector_indexing.create_index()
         # 3 - retrieval - retrieve relevant documents for all questions in
         # datasets_public/public/
-        retrieval = Retrieval(chunks)
+        # retrieval = Retrieval(chunks)
         
-        retrieval.write_search_results()
-        # Bonus: semantic retrieval
-        answer_generator = AnswerGenerator()
-        answer_generator.write_answers()
-        evaluation = Evaluation()
-        evaluation.print_report()
-        # Bonus: serve app
-        Pipeline.serve()
+        # retrieval.write_search_results()
+        # # Bonus: semantic retrieval
+        # answer_generator = AnswerGenerator()
+        # answer_generator.write_answers()
+        # evaluation = Evaluation()
+        # evaluation.print_report()
+        # # Bonus: serve app
+        # Pipeline.serve()
 
     @staticmethod
     def index(max_chunk_size: int = 2000,

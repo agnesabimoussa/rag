@@ -1,5 +1,7 @@
 from pathlib import Path
 import json
+import pickle
+from rank_bm25 import BM25Okapi
 from typing import List
 from typing import Any
 from src.error_handling.inavlid_json import InvalidJSON
@@ -43,3 +45,14 @@ class FileOperations:
         with open(file, "r", encoding="utf-8") as f:
             content = f.read()
         return content
+
+    @staticmethod
+    def load_bm25(file: Path) -> BM25Okapi:
+        with open(file, "rb") as f:
+            bm25 = pickle.load(f)
+        return bm25
+
+    @staticmethod
+    def write_bm25(file: Path, bm25: BM25Okapi) -> None:
+        with open(file, "wb") as f:
+            pickle.dump(bm25, f)

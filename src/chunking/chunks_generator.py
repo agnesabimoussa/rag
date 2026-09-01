@@ -5,7 +5,7 @@ from tqdm import tqdm
 from src.chunking.code_chunker import CodeChunker
 from src.chunking.markdown_chunker import MarkdownChunker
 from src.data_models.chunk import Chunk
-from src.ingestion.file_operations import FileOperations
+from src.utils.file_operations import FileOperations
 
 
 class ChunksGenerator:
