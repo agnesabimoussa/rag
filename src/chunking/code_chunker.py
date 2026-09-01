@@ -2,14 +2,14 @@ from typing import List, Optional
 from pathlib import Path
 import ast
 import logging
-from src.chunking_modules.abstract_chunker import AbstractChunker
-from src.chunking_modules.chunk import CodeChunk
+from src.chunking.chunker import Chunker
+from src.data_models.chunk import CodeChunk
 
 
 logger = logging.getLogger(__name__)
 
 
-class CodeChunking(AbstractChunker):
+class CodeChunker(Chunker):
     def __init__(self,
                  max_chunk_size: int) -> None:
         super().__init__(max_chunk_size)

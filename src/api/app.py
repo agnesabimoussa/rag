@@ -10,7 +10,7 @@ from src.answer_generation_modules.answer_generator import AnswerGenerator
 from src.data_models.minimal_source import MinimalSource
 from src.data_models.search_answer import MinimalAnswer
 from src.data_models.search_result import MinimalSearchResults
-from src.retrieval_modules.retrieval import Retrieval
+from src.retrieval.retrieval import Retrieval
 from src.models.language_model import LLM
 
 

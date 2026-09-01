@@ -2,10 +2,11 @@ import itertools
 from typing import List
 from pathlib import Path
 from abc import ABC, abstractmethod
-from src.chunking_modules.chunk import Chunk
+from src.data_models.chunk import Chunk
+from src.ingestion.file_operations import FileOperations
 
 
-class AbstractChunker(ABC):
+class Chunker(ABC):
     def __init__(self, max_chunk_size: int) -> None:
         self.id_generator = itertools.count(start=1)
         self.max_chunk_size = max_chunk_size
@@ -48,17 +49,11 @@ class AbstractChunker(ABC):
         normalized_end = normalized_start + len(normalized_target) - 1
         return source_positions[normalized_start], source_positions[normalized_end] + 1
 
-    @staticmethod
-    def read_file(file: Path) -> str:
-        with open(file, "r", encoding="utf-8") as f:
-            content = f.read()
-        return content
-
     def chunk_files(self,
                     files: List[Path]) -> List[Chunk]:
         chunks = []
         for file in files:
-            content = AbstractChunker.read_file(file)
+            content = FileOperations.read_file(file)
             if content.strip():
                 file_chunks = self.chunk_file(file, content)
                 chunks.extend(file_chunks)

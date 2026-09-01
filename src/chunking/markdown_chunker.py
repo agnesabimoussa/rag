@@ -1,11 +1,11 @@
 from typing import List
 from pathlib import Path
-from src.chunking_modules.chunk import MarkdownChunk
-from src.chunking_modules.abstract_chunker import AbstractChunker
+from src.data_models.chunk import MarkdownChunk
+from src.chunking.chunker import Chunker
 from langchain_text_splitters import MarkdownHeaderTextSplitter
 
 
-class MarkdwonChunking(AbstractChunker):
+class MarkdwonChunker(Chunker):
     def __init__(self,
                  max_chunk_size: int) -> None:
         super().__init__(max_chunk_size)

@@ -30,3 +30,16 @@ class FileOperations:
         except (ValidationError, json.JSONDecodeError, OSError):
             raise InvalidJSON("InvalidJSON exception occured."
                               f"{file} contains invalid JSON.")
+
+    @staticmethod
+    def write_json(path: Path, content: Any):
+        with open(path, "w", encoding="utf-8") as opened:
+            json.dump(content.model_dump(),
+                      opened,
+                      indent=4)
+
+    @staticmethod
+    def read_file(file: Path) -> str:
+        with open(file, "r", encoding="utf-8") as f:
+            content = f.read()
+        return content

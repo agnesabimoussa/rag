@@ -1,7 +1,6 @@
-# subtype of Indexing
 from src.indexing_module.indexing import Indexing
-from src.chunking_modules.chunk import Chunk
-from src.text_processing import tokenize_text
+from src.data_models.chunk import Chunk
+from src.utils.text_processing import tokenize_text
 from typing import List
 import pickle
 from rank_bm25 import BM25Okapi

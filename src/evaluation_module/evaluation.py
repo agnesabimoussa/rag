@@ -5,7 +5,7 @@ from src.data_models.rag_dataset import RagDataset
 from src.error_handling_modules.invalid_test import InvalidTest
 from src.data_models.answered_question import AnsweredQuestion
 from src.data_models.unanswered_question import UnansweredQuestion
-from src.file_operations.file_operations import FileOperations
+from src.utils.file_operations import FileOperations
 
 
 # recall@k = top k relevant chunks retrieved by the retrieval system / total relevant ground truth chunks

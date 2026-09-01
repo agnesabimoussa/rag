@@ -6,11 +6,10 @@ from src.models.model_download import ModelDownload
 
 class LLM:
     def __init__(self, model_path: str = "Qwen/Qwen3-0.6B", system_prompt: str = None):
-        # local_weights_dir = ModelDownload._ensure_local_weights(model_path)
-        self.tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+        local_weights_dir = ModelDownload._ensure_local_weights(model_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(local_weights_dir)
         self.model = AutoModelForCausalLM.from_pretrained(
-            model_path,
-            trust_remote_code=True,
+            local_weights_dir,
             torch_dtype="auto",
             device_map="auto",
         )

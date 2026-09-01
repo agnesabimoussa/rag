@@ -1,6 +1,6 @@
 from typing import List, Any
 from pathlib import Path
-from src.chunking_modules.chunk import (Chunk, MarkdownChunk, CodeChunk)
+from src.data_models.chunk import (Chunk, MarkdownChunk, CodeChunk)
 from abc import ABC, abstractmethod
 
 

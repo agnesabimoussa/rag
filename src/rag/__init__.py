@@ -4,7 +4,7 @@ This package exposes the top-level pipeline entry point used to run the
 full ingestion, retrieval, and answer-generation workflow.
 """
 
-from src.pipeline_module.pipeline import Pipeline
+from src.pipeline.pipeline import Pipeline
 
 
 def main() -> None:

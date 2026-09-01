@@ -11,7 +11,8 @@ from typing import List, Optional
 import pickle
 from tqdm import tqdm
 from src.utils.file_operations import FileOperations
-from src.retrieval
+from src.retrieval.lexical_retriever import LexicalRetriever
+
 
 class Retrieval:
     def __init__(self,
@@ -23,7 +24,7 @@ class Retrieval:
         self.bm25 = bm25
         self.save_directory = Path(save_directory)
         self.dataset_path = Path(dataset_path)
-        self.lexical_retriver = 
+        self.lexical_retriver =LexicalRetriever()
         self.chunks = chunks
         if k <= 0:
             k = 5
