@@ -5,7 +5,8 @@ from typing import List
 
 
 class EmbeddingModel:
-    def __init__(self, model_path: str = "sentence-transformers/all-MiniLM-L6-v2"):
+    def __init__(self,
+                 model_path: str = "sentence-transformers/all-MiniLM-L6-v2") -> None:
         local_weights_dir = ModelDownload._ensure_local_weights(model_path)
         self.embedding_model = SentenceTransformer(local_weights_dir)
 

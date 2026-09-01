@@ -1,34 +1,39 @@
 from src.data_models.unanswered_question import UnansweredQuestion
-from src.data_models.minimal_source import MinimalSource
 from src.data_models.search_result import (StudentSearchResults,
                                            MinimalSearchResults)
 from src.data_models.chunk import Chunk, CodeChunk, MarkdownChunk
-from src.utils.text_processing import tokenize_text
 from rank_bm25 import BM25Okapi
 from pathlib import Path
-import heapq
 from typing import List, Optional
 import pickle
 from tqdm import tqdm
 from src.utils.file_operations import FileOperations
 from src.retrieval.lexical_retriever import LexicalRetriever
+from src.retrieval.semantic_retriever import SemanticRetriever
+from src.retrieval.hybrid_retrieval import HybridRetriever
+from chromadb import Collection
 
 
 class Retrieval:
     def __init__(self,
-                 bm25: BM25Okapi,
                  chunks: List[Chunk],
                  k: int = 5,
                  dataset_path: str = "data/datasets/UnansweredQuestions/",
                  save_directory: str = "data/output/search_results/") -> None:
-        self.bm25 = bm25
         self.save_directory = Path(save_directory)
         self.dataset_path = Path(dataset_path)
-        self.lexical_retriver =LexicalRetriever()
         self.chunks = chunks
-        if k <= 0:
-            k = 5
         self.k = k
+
+    def get_lexical_rankings(self,
+                             bm25: BM25Okapi):
+        lexical_retriver = LexicalRetriever(bm25, self.chunks, self.k)
+
+    def get_semantic_rankings(self, collection: Collection):
+        semantic_retriever = SemanticRetriever(collection, self.k)
+
+    def get_hybrid_rankings(self):
+        hybrid_retriever = HybridRetriever()
 
     @classmethod
     def from_index_dir(cls,
@@ -60,70 +65,6 @@ class Retrieval:
         if not dataset_path:
             dataset_path = "data/datasets/UnansweredQuestions/"
         return cls(bm25, chunks, k, dataset_path, save_directory)
-
-    def retrieve_context(self, prompt: str) -> List[MinimalSource]:
-        tokenized_query = tokenize_text(prompt)
-        if not tokenized_query:
-            tokenized_query = prompt.lower().split()
-
-        scores = self.bm25.get_scores(tokenized_query)
-        candidate_pool = min(len(self.chunks), max(self.k * 8, 40))
-        ranked_indices = [
-            index
-            for index, _ in heapq.nlargest(
-                candidate_pool,
-                enumerate(scores),
-                key=lambda item: item[1],
-            )
-        ]
-        ranked_chunks = [self.chunks[index] for index in ranked_indices]
-
-        unique_chunks = []
-        seen_groups = set()
-        seen_chunk_ids = set()
-        seen_source_spans = set()
-
-        for chunk in ranked_chunks:
-            group_id = chunk.original_chunk_id or chunk.id
-            if group_id in seen_groups:
-                continue
-            source_span = (
-                chunk.source,
-                chunk.first_character_index,
-                chunk.last_character_index,
-            )
-            if chunk.id not in seen_chunk_ids and source_span not in seen_source_spans:
-                unique_chunks.append(chunk)
-                seen_groups.add(group_id)
-                seen_chunk_ids.add(chunk.id)
-                seen_source_spans.add(source_span)
-            if len(unique_chunks) == self.k:
-                break
-
-        if len(unique_chunks) < self.k:
-            for chunk in ranked_chunks:
-                source_span = (
-                    chunk.source,
-                    chunk.first_character_index,
-                    chunk.last_character_index,
-                )
-                if chunk.id in seen_chunk_ids or source_span in seen_source_spans:
-                    continue
-                unique_chunks.append(chunk)
-                seen_chunk_ids.add(chunk.id)
-                seen_source_spans.add(source_span)
-                if len(unique_chunks) == self.k:
-                    break
-
-        return [
-            MinimalSource(
-                file_path=chunk.source,
-                first_character_index=chunk.first_character_index,
-                last_character_index=chunk.last_character_index,
-                scope=getattr(chunk, "type", None)
-            )
-            for chunk in unique_chunks
-        ]
 
     def search_dataset(self, file: Optional[Path] = None) -> StudentSearchResults:
         file = file or self.dataset_path

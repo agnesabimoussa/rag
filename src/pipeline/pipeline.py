@@ -21,10 +21,11 @@ class Pipeline:
         bm25 = lexical_indexing.create_index()
         # Bonus: create chromadb index
         vector_indexing = VectorIndexing(chunks)
-        vector_indexing.create_index()
+        collection = vector_indexing.create_index()
         # 3 - retrieval - retrieve relevant documents for all questions in
         # datasets_public/public/
-        retrieval = Retrieval(bm25, chunks)
+        retrieval = Retrieval(chunks)
+        
         retrieval.write_search_results()
         # Bonus: semantic retrieval
         answer_generator = AnswerGenerator()

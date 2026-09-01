@@ -3,6 +3,7 @@ from src.indexing_module.indexing import Indexing
 from src.data_models.chunk import Chunk
 import chromadb
 from typing import List
+from chromadb import Collection
 
 
 class VectorIndexing(Indexing):
@@ -14,7 +15,7 @@ class VectorIndexing(Indexing):
         self.client = chromadb.PersistentClient(path=f"{output_file}/chroma_db")
         self.collection = self.client.get_or_create_collection(name="documents")
 
-    def create_index(self) -> None:
+    def create_index(self) -> Collection:
         batch_size = 1000
 
         chunks = [self._chunk_index_text(chunk) for chunk in self.chunks]
@@ -31,3 +32,4 @@ class VectorIndexing(Indexing):
                 documents=batch_chunks,
                 embeddings=embeddings.tolist(),
             )
+        return self.collection
